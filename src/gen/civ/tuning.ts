@@ -140,6 +140,7 @@ common = false;
 add(
   num({ id: 'realm.republic', name: '海边城邦多是共和国' }, { official: 0.75, min: 0, max: 1, step: 0.05, unit: '成' }),
   mult({ id: 'realm.reach', name: '国都管得到多远' }),
+  mult({ id: 'realm.tech', name: '技艺进步快慢' }),
 );
 
 // ---- 战争 ----
@@ -288,7 +289,7 @@ for (let i = 0; i < ITEMS.length; i++) {
   if (into !== undefined) ITEMS[i] = { ...ITEMS[i], retired: true, ...(into ? { into } : {}) };
 }
 
-/** 全部 70 项(照组、常用在前的先后;连页面上拿掉的) */
+/** 全部 71 项(照组、常用在前的先后;连页面上拿掉的) */
 export const TUNING_ITEMS: readonly TuningItem[] = ITEMS;
 /** 页面上列的项(拿掉的不算;照组、常用在前的先后) */
 export const SHOWN_ITEMS: readonly TuningItem[] = ITEMS.filter((x) => !x.retired);

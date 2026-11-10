@@ -10,6 +10,7 @@ import { CONSORTS_KNOBS } from './consorts';
 import { CONTROL_KNOBS } from './control';
 import { COUNCIL_KNOBS } from './council';
 import { COUNCIL_RULES_KNOBS } from './councilRules';
+import { DEVELOPMENT_KNOBS } from './development';
 import { DIPLOMACY_KNOBS } from './diplomacy';
 import { DYNASTY_KNOBS } from './dynasty';
 import { EXILE_KNOBS } from './exile';
@@ -42,6 +43,7 @@ export const CIV_KNOBS: readonly Knobs<Record<string, KnobValue>>[] = [
   CONTROL_KNOBS,
   COUNCIL_KNOBS,
   COUNCIL_RULES_KNOBS,
+  DEVELOPMENT_KNOBS,
   DIPLOMACY_KNOBS,
   DYNASTY_KNOBS,
   EXILE_KNOBS,

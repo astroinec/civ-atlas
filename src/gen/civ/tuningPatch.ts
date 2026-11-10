@@ -38,6 +38,7 @@ const KNOBS: Readonly<Record<string, TuningKnobs>> = {
   'realm.sail': { knobs: ['polities.SAIL_LEVEL'], inv: true },
   'realm.republic': { knobs: ['polities.REPUBLIC_P'] },
   'realm.reach': { knobs: ['control.REACH'] },
+  'realm.tech': { knobs: ['development.ERA_PACE'] },
   'war.odds': { knobs: ['wars.WAR_ODDS'] },
   'war.truce': { knobs: ['wars.TRUCE'] },
   'war.length': { knobs: ['wars.LENGTH'] },

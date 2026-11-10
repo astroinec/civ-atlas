@@ -69,7 +69,7 @@ import { grantSail, polityModelOf, type PolityModel } from './polities';
 import { POLICY_KNOBS, focusIndex, segAt, type PolicySeg } from './policy';
 import { cultureModelOf } from './cultures';
 import { TableEngine, type TableCard } from './engine/tables';
-import type { KnobSet } from './engine/knobs';
+import { defineKnobs, type KnobSet } from './engine/knobs';
 import { NEVER, devCards } from './devTables';
 import { warModelOf } from './wars';
 import { pandemicModelOf, slumpIn, type PandemicModel } from './pandemicState';
@@ -122,6 +122,9 @@ export const CAP_COUNT = 5;
 export const ERAS = ['石器', '青铜', '铁器', '中古', '火药', '工业', '电气', '信息', '未来'] as const;
 /** 动力为 1 时,自己长过一个时代要几年(按所在的时代) */
 const ERA_YEARS: readonly number[] = [1000, 800, 700, 750, 3000, 1600, 1300, 1500, 2000];
+
+/** 可调的数(规则项「技艺进步快慢」realm.tech):ERA_PACE = 自己长(创新)的速度倍数,各档要的年数 ÷ 它;官方 1 = 和原来逐位一样 */
+export const DEVELOPMENT_KNOBS = defineKnobs('development', { ERA_PACE: 1 });
 /** 能力的上限(未来时代以后不再往上记) */
 const LEVEL_MAX = 9;
 /** 快照里一档能力存成几(Uint8:LEVEL_MAX × LEVEL_SCALE ≤ 255) */
@@ -687,11 +690,12 @@ export function devCardsOf(knobs: KnobSet, rate = false): TableCard[] {
   let cards = memo.get(knobs);
   if (cards) return cards;
   const { FOCUS_MOB } = knobs.get(POLICY_KNOBS);
+  const { ERA_PACE } = knobs.get(DEVELOPMENT_KNOBS);
   cards = devCards(
     {
       RESOURCES,
       CAPS,
-      ERA_YEARS,
+      ERA_YEARS: ERA_PACE === 1 ? ERA_YEARS : ERA_YEARS.map((y) => y / ERA_PACE),
       LEVEL_MAX,
       LEARN,
       SAME_STATE,
