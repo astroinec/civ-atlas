@@ -66,6 +66,7 @@
 import { AdjKind, Layer, type Civ, type Polity, type Year } from './types';
 import { flog, keyed4, subSeed } from './engine/rand';
 import { type CivSim } from './engine/sim';
+import { swayBias } from './authorSway';
 import { polityModelOf, rulingLeanings, type PolityModel } from './polities';
 import { politicsModelOf, type PoliticsModel } from './politics';
 import { warModelOf, type WarModel } from './wars';
@@ -467,7 +468,12 @@ function check(sim: CivSim, pm: PolityModel, pol: PoliticsModel, wm: WarModel, c
   const liftK = has(Practice.Census) ? CENSUS_LIFT : 1;
   const costK = has(Practice.Census) ? CENSUS_COST : 1;
   /** 随机的一截(每种议题各取一个) */
-  const jit = (i: Issue) => JITTER * (keyed4(base, pm.ptag[p], k, i, 0) - 0.5);
+  // 作者的议事施压(authorSway.ts):加在随机那一截上(没有施压 = 不加,和原来逐位一样)
+  const jit = (i: Issue) => {
+    const j = JITTER * (keyed4(base, pm.ptag[p], k, i, 0) - 0.5);
+    const w = swayBias(sim, p, i, t);
+    return w ? j + w : j;
+  };
   /** broke:直征是因为国用不足才议的(记 cause = broke;不然是君主锐意兴革);b:脱离时想转投的邻国;opt:废君办成以后能议政的有几档 */
   const record = (i: Issue, out: Outcome, region: number, broke = false, b = -1, opt?: number) => {
     applyRule(r, i, out, t, opt);

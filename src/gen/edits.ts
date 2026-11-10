@@ -750,7 +750,10 @@ export type InterventionKind =
   | 'boost'
   | 'trek'
   | 'stay'
-  | 'appoint';
+  | 'appoint'
+  | 'mission'
+  | 'urge'
+  | 'sway';
 
 /**
  * 大迁徙(trek)"推演挑"时走多远:near 近(五到十州)/ mid 中(十到二十州,和推演自己起的一样)/ far 远(二三十州,横穿大陆,只有下令才有)。
@@ -880,6 +883,12 @@ export type Intervention = (
   | { kind: 'boost'; a: string; from: number; mul?: BoostMul; until?: number; regions?: string[] }
   | { kind: 'trek'; folk: string; from: number; region?: string; to?: string; reach?: Exclude<TrekReach, 'mid'>; dir?: TrekDir }
   | { kind: 'stay'; folk: string; from: number; until?: number }
+  /** 传教(civ/authorSway.ts):b 国此刻所奉之教在 a 国传得快 mul 倍,到 until(不含)为止 */
+  | { kind: 'mission'; a: string; b: string; from: number; until: number; mul: number }
+  /** 倡议学说:a 国鼓吹第 idea 说(ideoTables.ts 的思潮表下标),国中已传进来的州扎根更快,到 until 为止 */
+  | { kind: 'urge'; a: string; idea: number; from: number; until: number }
+  /** 议事施压:a 国议 issue 这一类议题时推一把(for)或拦一把(against),到 until 为止 */
+  | { kind: 'sway'; a: string; issue: SwayIssue; side: 'for' | 'against'; from: number; until: number }
   | {
       kind: 'policy';
       a: string;
@@ -1964,7 +1973,15 @@ function folkRenamed(civ: Civ, f: Faith, cultures: readonly Culture[]): string |
 /** 干预年份的上限(推演引擎能预约的最远时刻) */
 export const INTERVENTION_YEAR_MAX = 65535;
 
-export const INTERVENTION_KINDS: readonly InterventionKind[] = ['protect', 'ally', 'declare', 'unity', 'cede', 'found', 'move', 'halt', 'crown', 'policy', 'destroy', 'death', 'temper', 'disaster', 'treaty', 'neutral', 'regent', 'marry', 'keep', 'boost', 'trek', 'stay', 'appoint'];
+export const INTERVENTION_KINDS: readonly InterventionKind[] = ['protect', 'ally', 'declare', 'unity', 'cede', 'found', 'move', 'halt', 'crown', 'policy', 'destroy', 'death', 'temper', 'disaster', 'treaty', 'neutral', 'regent', 'marry', 'keep', 'boost', 'trek', 'stay', 'appoint', 'mission', 'urge', 'sway'];
+
+/** 议事施压的几类议题(civ/authorSway.ts 换成议事的议题):tax 直征、army 兵权、office 任免、fief 分封、cut 削藩、reform 改制 */
+export const SWAY_ISSUES = ['tax', 'army', 'office', 'fief', 'cut', 'reform'] as const;
+export type SwayIssue = (typeof SWAY_ISSUES)[number];
+/** 传教、倡议、施压最长管多少年 */
+export const SWAY_YEARS_MAX = 60;
+/** 传教的倍数 */
+export const MISSION_MULS = [2, 3, 4] as const;
 
 /** 人物键的几段(格式见 personKey):国家键、身份、生成时的名字、生年(取整)、同名同年的第几个(0 起);格式不对 = null */
 export interface PersonKeyParts {
@@ -2362,6 +2379,22 @@ export function tidyIntervention(x: unknown): Intervention | null {
       const r = cleanAppoint(o, a, from, untilOf());
       if (!r) return null;
       v = r;
+    } else if (kind === 'mission' || kind === 'urge' || kind === 'sway') {
+      const until0 = untilOf();
+      const until = Math.min(from + SWAY_YEARS_MAX, until0 ?? from + 30);
+      if (kind === 'mission') {
+        if (!isPolityKey(o.b) || o.b === a) return null;
+        const m = Number(o.mul);
+        const mul = (MISSION_MULS as readonly number[]).includes(m) ? m : 3;
+        v = { kind, a, b: o.b, from, until, mul };
+      } else if (kind === 'urge') {
+        const idea = Number(o.idea);
+        if (!Number.isInteger(idea) || idea < 0 || idea > 31) return null;
+        v = { kind, a, idea, from, until };
+      } else {
+        if (!(SWAY_ISSUES as readonly unknown[]).includes(o.issue) || (o.side !== 'for' && o.side !== 'against')) return null;
+        v = { kind, a, issue: o.issue as SwayIssue, side: o.side, from, until };
+      }
     } else if (kind === 'marry') {
       const p = parsePersonKey(o.person);
       if (!p || p.polity !== a || (p.role !== 'ruler' && p.role !== 'prince') || !isPolityKey(o.b) || o.b === a) return null;

@@ -240,6 +240,7 @@ common = false;
 add(
   mult({ id: 'disaster.spread', name: '瘟疫传得快慢' }),
   num({ id: 'disaster.great', name: '大瘟疫的几率' }, { official: 0.3, min: 0, max: 1, step: 0.05, unit: '成' }),
+  num({ id: 'disaster.roads', name: '瘟疫随交通' }, { official: 0, min: 0, max: 6, step: 0.5, unit: '档' }),
   mult({ id: 'disaster.growth', name: '城长得快慢' }),
   mult({ id: 'disaster.wear', name: '种地耗地力' }, { off: true }),
 );
@@ -289,7 +290,7 @@ for (let i = 0; i < ITEMS.length; i++) {
   if (into !== undefined) ITEMS[i] = { ...ITEMS[i], retired: true, ...(into ? { into } : {}) };
 }
 
-/** 全部 71 项(照组、常用在前的先后;连页面上拿掉的) */
+/** 全部 72 项(照组、常用在前的先后;连页面上拿掉的) */
 export const TUNING_ITEMS: readonly TuningItem[] = ITEMS;
 /** 页面上列的项(拿掉的不算;照组、常用在前的先后) */
 export const SHOWN_ITEMS: readonly TuningItem[] = ITEMS.filter((x) => !x.retired);

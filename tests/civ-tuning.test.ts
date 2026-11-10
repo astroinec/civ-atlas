@@ -19,11 +19,11 @@ const table = (k: string) => {
 
 describe('规则项表', () => {
   it('70 项、7 组、常用 28 项;编号不重复、写法固定;每组都有常用的', () => {
-    expect(TUNING_ITEMS.length).toBe(71);
+    expect(TUNING_ITEMS.length).toBe(72);
     expect(TUNING_ITEMS.filter((x) => x.common).length).toBe(28);
     expect(TUNING_GROUPS.length).toBe(7);
     const ids = TUNING_ITEMS.map((x) => x.id);
-    expect(new Set(ids).size).toBe(71);
+    expect(new Set(ids).size).toBe(72);
     for (const x of TUNING_ITEMS) {
       expect(x.id).toMatch(/^[a-z]+\.[a-z][a-zA-Z]*$/);
       expect(x.id.split('.')[0]).toBe(x.group);
@@ -188,7 +188,7 @@ describe('页面上拿掉的项、第 4 版换算', () => {
       'war.rest', 'war.goal', 'war.break', 'war.fronts', 'war.revanche', 'war.grudge', 'split.share', 'split.age',
       'diplo.maxPacts', 'diplo.zone', 'folk.trekAbsorb', 'disaster.wear', 'court.maxAge', 'court.restore',
     ]);
-    expect(SHOWN_ITEMS.length).toBe(57);
+    expect(SHOWN_ITEMS.length).toBe(58);
     for (const x of gone) {
       expect(x.common, x.id).toBe(false);
       if (!x.into) continue;
@@ -261,6 +261,8 @@ describe('换成旋钮的改动(第 1 版)', () => {
       const p = tuningPatch(all, 1)!;
       expect(cleanKnobs(p)).toEqual(p);
       for (const x of TUNING_ITEMS) {
+        // 官方值就在一头的(disaster.roads:0 = 不看交通)那一头没有改动
+        if (x.kind === 'num' && tuningEnds(x)[side] === x.official) continue;
         const q = tuningPatch({ [x.id]: tuningEnds(x)[side] }, 1)!;
         expect(q, x.id).toBeDefined();
         expect(cleanKnobs(q), x.id).toEqual(q);
@@ -367,6 +369,7 @@ describe('写成字', () => {
     // 每一项的两头都写得出(不冒 undefined、NaN)
     for (const x of TUNING_ITEMS)
       for (const v of tuningEnds(x)) {
+        if (x.kind === 'num' && v === x.official) continue;
         const s = tuningSummary({ [x.id]: v });
         expect(s, x.id).toMatch(/^改了 1 项：/);
         expect(s, x.id).not.toMatch(/undefined|NaN|Infinity/);

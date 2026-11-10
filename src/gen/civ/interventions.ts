@@ -94,6 +94,7 @@ import { treatyModelOf } from './treaties';
 import { regencyModelOf } from './regency';
 import { marriageModelOf } from './marriage';
 import { installBoosts, strikeBoost } from './boost';
+import { installSways, strikeSway } from './authorSway';
 import { trekModelOf } from './migration';
 import { assimModelOf } from './assimilation';
 import { APPOINT_AGE, IV_REIGNING, appointEnd, authorLeadsNow, skillPower, type AppointInput, type AppointIv, type AuthorLead } from './appoint';
@@ -730,6 +731,11 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
       person(v, i, a, t);
       return;
     }
+    if (v.kind === 'mission' || v.kind === 'urge' || v.kind === 'sway') {
+      // 传教、倡议学说、议事施压:登记生效的一段(authorSway.ts;史事 intervene 也在那里记)
+      strikeSway(sim, iv, v, i, a, t);
+      return;
+    }
     if (v.kind === 'boost') {
       // 推一把发展:快几倍登记(发展度每一步照着乘)/ 直接进下一个时代(boost.ts;史事 intervene 也在那里记)
       strikeBoost(sim, iv, v, i, a, t);
@@ -805,6 +811,8 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
 
   // 推一把发展的快几倍:已经生效的按史事推出来,发展度每一步照着乘(没有快几倍的不挂)
   installBoosts(sim, iv);
+  // 传教、倡议学说、议事施压:已经生效的按史事推出来(没有这三样的不挂)
+  installSways(sim, iv);
   // 作者的良将 / 名将挂帅的仗:本方兵力加成(没有带能力的任将不挂 —— 寻常的、没任过作者将领的世界一点不变)
   if (iv.stored.some((v) => v.kind === 'appoint' && v.skill)) api.war.led = authorLed(sim, pm, iv);
 }

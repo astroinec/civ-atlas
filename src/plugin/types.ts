@@ -341,6 +341,9 @@ export type InterventionInfo = (
   | { kind: 'boost'; a: string; from: number; mul?: 3 | 10; until?: number; regions?: string[] }
   | { kind: 'trek'; folk: string; from: number; region?: string; to?: string; reach?: 'near' | 'far'; dir?: 'east' | 'south' | 'west' | 'north' }
   | { kind: 'stay'; folk: string; from: number; until?: number }
+  | { kind: 'mission'; a: string; b: string; from: number; until: number; mul: number }
+  | { kind: 'urge'; a: string; idea: number; from: number; until: number }
+  | { kind: 'sway'; a: string; issue: 'tax' | 'army' | 'office' | 'fief' | 'cut' | 'reform'; side: 'for' | 'against'; from: number; until: number }
   | {
       kind: 'policy';
       a: string;

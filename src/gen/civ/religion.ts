@@ -35,6 +35,7 @@ import { AdjKind, Layer } from './types';
 import { ownersAt, type Owners } from './engine/timeline';
 import { capitalAt, populationAt } from './growth';
 import { personNamers } from './naming';
+import { swaySegs, type SwaySeg } from './authorSway';
 import { keyed, subSeed } from '../util';
 import type { CivModule } from './modules';
 
@@ -135,6 +136,8 @@ type Naming = { kind: 'folk'; cu: Culture } | { kind: 'great'; cu: Culture; cell
  * 推完再照历史算一遍(buildReligion)也是它,结果和推演里逐步算的逐字节一样
  */
 export class FaithSim {
+  /** 作者的传教(authorSway.ts;挂在引擎上时才有) */
+  missions?: () => readonly SwaySeg[];
   /** 算到哪一年(最近一步的年份;还没算 = −Infinity) */
   year: Year = -Infinity;
   /** 州数(这一段推演的州;地形大事以前的段按编号是它的前一部分) */
@@ -460,7 +463,9 @@ export class FaithSim {
 
     // 传播:大教 / 教派向相邻的州传
     const { next, stateOf, entered, cityIn } = this;
-    spreadStep(seed, y, reg, faith, next, ownP, stateOf, this.isFolk, this.rootArr);
+    // 作者的传教(authorSway.ts):此刻生效的几段;没有 = 不传 boost(和原来逐位一样)
+    const ms = this.missions?.().filter((m) => y >= m.from && y < m.until);
+    spreadStep(seed, y, reg, faith, next, ownP, stateOf, this.isFolk, this.rootArr, ms?.length ? ms : undefined);
     // 改信:第一次传进一国(那国里还没有别的州信这一教)记一件"传入"
     const F = faiths.length;
     if (this.inPolity.length < P * F) {
@@ -628,6 +633,7 @@ function simSource(sim: CivSim, cm: CultureModel, pm: PolityModel): FaithSource 
 
 function hook(sim: CivSim, fs: FaithSim, first: Year): void {
   sims.set(sim, fs);
+  fs.missions = () => swaySegs(sim, 'mission');
   sim.everyYears(first, STEP, (y) => fs.step(y));
 }
 
@@ -642,6 +648,7 @@ export function installReligion(sim: CivSim, civSeed: number, cm: CultureModel, 
  */
 export function resumeReligion(sim: CivSim, civ: Civ, cm: CultureModel, pm: PolityModel, eras: readonly FaithEra[]): void {
   const fs = new FaithSim(civ.seed, simSource(sim, cm, pm), civ.regions, eras);
+  fs.missions = () => swaySegs(sim, 'mission', civ);
   let y = 0;
   for (; y <= civ.endYear; y += STEP) fs.step(y);
   hook(sim, fs, y);
@@ -731,6 +738,7 @@ function spreadStep(
   stateOf: Int32Array,
   isFolk: Uint8Array,
   rootArr: Int16Array,
+  missions?: readonly SwaySeg[],
 ): void {
   const { adjStart, adj, adjKind } = regions;
   next.set(faith);
@@ -756,6 +764,7 @@ function spreadStep(
       const kind = adjKind[k];
       if (kind === AdjKind.SeaRoute || kind === AdjKind.Strait) p *= SEA;
       else if (kind === AdjKind.Mountain) p *= MOUNTAIN;
+      if (missions && pn >= 0) for (const m of missions) if (m.p === pn && (m.k === f || rootArr[f] === m.k)) p *= m.w;
       if (keyed(seed, 10 + y, r, n) < p) next[n] = f;
     }
   }

@@ -45,6 +45,7 @@
 import { Layer, type Annal, type Polity, type RulerLeanings, type Year } from './types';
 import { keyed4 } from './engine/rand';
 import type { CivSim } from './engine/sim';
+import { swayBias } from './authorSway';
 import { dynastyReign, rulerOf, type PolityModel } from './polities';
 import type { PoliticsModel } from './politics';
 import type { WarModel } from './wars';
@@ -211,6 +212,8 @@ export function reformCheck(cx: ReformCtx): boolean {
     else if (r.charter < 2 && right >= RIGHT_MIN) issue = Issue.Charter;
     if (issue === null || !cx.ready(issue)) return false;
     let x = X_0 + X_PUSH * (push - PUSH_MIN) + X_CRISIS * crisis - X_SKY * (sky - SKY_REF) - X_ARMY * army + JITTER * (R(U_JIT) - 0.5);
+    const sw = swayBias(sim, p, issue, t);
+    if (sw) x += sw;
     if (issue === Issue.Abolish) x -= ABOLISH_HARD + ABOLISH_BIG * Math.min(1, pm.size[p] / BIG_SIZE);
     if (issue !== Issue.Widen) x -= POLAR * Math.max(0, cx.u - POLAR_U);
     let out = x > DONE ? Outcome.Done : x > HALF ? Outcome.Half : x > SHELVE ? Outcome.Shelve : Outcome.Break;

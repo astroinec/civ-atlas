@@ -31,7 +31,8 @@ import type { Intervention } from '../edits';
 import { fpow, keyed, keyed4 } from './engine/rand';
 import { quantize, type CivSim } from './engine/sim';
 import { polityModelOf, sailsOcean, type PolityModel } from './polities';
-import { plagueModelOf } from './plague';
+import { PLAGUE_KNOBS, plagueModelOf } from './plague';
+import { CAP_COUNT, devModelOf } from './development';
 import { capitalAt, populationAt, settlementRank } from './growth';
 import { scheduleRebuild } from './cities';
 import { afflict } from './disaster';
@@ -158,6 +159,7 @@ function hook(run: Runner): void {
   const K = run.k;
   const { PAN_GAP, PAN_CHECK, ORIGIN_MIN, SLUMP_LOSS, SLUMP_FADE, FLOOR, DESOLATE, DESOLATE_YEARS, DESOLATE_MAX, QUAKE_CHECK, QUAKE_LEVELS, SLUMP_EVERY } = K;
   const { sim, pm, base, state } = run;
+  const { ROADS } = pm.knobs.get(PLAGUE_KNOBS);
   runners.set(sim, run);
   setPandemicModel(sim, state);
   const reg = pm.terrain.regions;
@@ -205,6 +207,11 @@ function hook(run: Runner): void {
       if (sid < 0) continue;
       const pop = populationAt(S[sid], t);
       if (!(pop >= ORIGIN_MIN) || !sailsOcean(pm, pm.polities[p], t)) continue;
+      // 瘟疫随交通(plague.ROADS > 0):港口一带的运输能力要到 ROADS − 0.5 档,远洋商路够密才起得了全球大疫
+      if (ROADS > 0) {
+        const d = devModelOf(sim);
+        if (!d || !(d.cur[r * CAP_COUNT + 1] >= ROADS - 0.5)) continue;
+      }
       const score = keyed4(base, k, reg.seat[r], 0, U_ORIGIN) / pop;
       if (score < best) {
         best = score;

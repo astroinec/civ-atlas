@@ -360,6 +360,12 @@ function ivText(civ: Civ, v: Intervention, i: number, a: string | undefined): st
     case 'appoint':
       // "林小满为大定将，到 1530 年卸任""林小满入大定为臣，到卒年（1561 年）"(authorIvInfo.ts)
       return postLine(authorName(civ, v.char), A, v, getEdits().era);
+    case 'mission':
+      return `${A}:${keyName(civ, v.b, v.from) || '他国'}来此传教（至第 ${v.until} 年）`;
+    case 'urge':
+      return `${A}:倡议新说（至第 ${v.until} 年）`;
+    case 'sway':
+      return `${A}:${v.side === 'for' ? '力主' : '力阻'}${({ tax: '直征', army: '收兵权', office: '铨选', fief: '分封', cut: '削藩', reform: '改制' } as Record<string, string>)[v.issue]}（至第 ${v.until} 年）`;
     case 'marry': {
       // "胡炜:娶大澜王朝宗室女""胡炜:本国宗室女嫁大澜王朝""胡炜:与大澜王朝互嫁"
       const B = keyName(civ, v.b, v.from) || '对方';

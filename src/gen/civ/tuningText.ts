@@ -98,6 +98,7 @@ const TEXT: Readonly<Record<string, TuningText>> = {
   'disaster.famine': { desc: '灾年里闹饥荒的多少；人口越顶到上限越容易闹。最左 = 没有饥荒。', short: '饥荒', offText: '没有饥荒' },
   'disaster.spread': { desc: '一州染疫以后传给邻州的快慢。', short: '瘟疫传播' },
   'disaster.great': { desc: '能远洋的港口起疫时，循着航线传遍几块大陆的大瘟疫占几成。', brief: (v) => `大瘟疫 ${cheng(v as number)}` },
+  'disaster.roads': { desc: '瘟疫传开的快慢看交通：路、船、商旅不发达的地方传得慢。数越大，要越发达的交通才传得满（0 = 不看交通，和原版一样；3 ≈ 到中古时代才传得满）。', brief: (v) => ((v as number) ? `瘟疫随交通 ${n(v as number)} 档` : '瘟疫不看交通') },
   'disaster.growth': { desc: '城的人口往上长的快慢。', short: '城的成长' },
   'disaster.wear': { desc: '人多地少、种得久了地力变薄的快慢。最左 = 地力不减。', short: '耗地力', offText: '种地不耗地力' },
   'court.reign': { desc: '一位君主在位最长大约多少年。往右多数君主也在位得久，往左多数几年就换。', brief: (v) => `在位最长约 ${n(v)} 年` },

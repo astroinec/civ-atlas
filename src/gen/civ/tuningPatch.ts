@@ -93,6 +93,7 @@ const KNOBS: Readonly<Record<string, TuningKnobs>> = {
   'disaster.famine': { knobs: ['unrest.P_BASE', 'unrest.P_FULL'] },
   'disaster.spread': { knobs: ['plague.SPREAD'] },
   'disaster.great': { knobs: ['plague.GREAT_ODDS'] },
+  'disaster.roads': { knobs: ['plague.ROADS'] },
   'disaster.growth': { knobs: ['polities.GROWTH'] },
   'disaster.wear': { knobs: ['population.WEAR'] },
   'court.reign': { knobs: ['rulers.REIGN_MAX', 'regents.SEIZE_REIGN'] },

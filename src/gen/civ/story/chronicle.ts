@@ -1115,6 +1115,21 @@ function interveneStory(civ: Civ, e: Annal, id: number): IvStory {
       return decreeStory(civ, e, id, v, A, R, fail, done);
     case 'boost':
       return boostStory(civ, e, v, A, R, fail, done);
+    case 'mission': {
+      if (e.b === -3) return fail(`欲遣人往${A}传教,然${A}已亡`, `那一年${A}已亡`);
+      if (e.b === -21) return fail(`欲遣人往${A}传教,然${B || '遣使之国'}未奉国教`, '遣使之国那时没有国教');
+      const f = e.n !== undefined && e.n >= 0 ? civ.religion?.faiths[e.n]?.name : '';
+      return done(`${f || '其教'}遣人入${A}传教`);
+    }
+    case 'urge': {
+      if (e.b === -3) return fail(`欲在${A}倡议新说,然${A}已亡`, `那一年${A}已亡`);
+      return done(`${A}有人大倡新说,士民渐从`);
+    }
+    case 'sway': {
+      if (e.b === -3) return fail(`欲左右${A}廷议,然${A}已亡`, `那一年${A}已亡`);
+      const ISSUE: Record<string, string> = { tax: '直征', army: '兵权', office: '铨选', fief: '分封', cut: '削藩', reform: '改制' };
+      return done(`${A}朝中有人${v.side === 'for' ? '力主' : '力阻'}${ISSUE[v.issue] ?? '国事'}`);
+    }
     default:
       return done(A);
   }

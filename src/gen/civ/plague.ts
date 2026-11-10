@@ -44,6 +44,7 @@ import { quantize, type CivSim } from './engine/sim';
 import { polityModelOf, sailsOcean, type PolityModel } from './polities';
 import { unrestModelOf } from './unrest';
 import { populationAt } from './growth';
+import { CAP_COUNT, devModelOf } from './development';
 import {
   IV_LOSS,
   PANDEMIC_K,
@@ -67,6 +68,9 @@ import { defineKnobs } from './engine/knobs';
 // ---- 调参(以 20 个种子的统计为准) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
 export const PLAGUE_KNOBS = defineKnobs('plague', {
+  /** 瘟疫随交通(规则项 disaster.roads):> 0 时传开的几率 × 染疫那州运输能力的几成 = (运输 + 0.5) ÷ ROADS(最低 ROADS_MIN,最高 1);0 = 不看(官方) */
+  ROADS: 0,
+  ROADS_MIN: 0.12,
   /** 看疫情:第一次在哪一年,之后每隔多少年 */
   PLAGUE_FIRST: 0,
   PLAGUE_EVERY: 30,
@@ -231,7 +235,13 @@ export function installPlague(sim: CivSim, pm: PolityModel, seed: number, calami
 
 function hook(sim: CivSim, pl: PlagueModel, calamity: Calamity | undefined): void {
   const K = pl.pm.knobs.get(PLAGUE_KNOBS);
-  const { GREAT_YEARS, ORIGIN_MIN, PORT_W, ORIGIN_NORM, GREAT_ODDS, PAN_SPARE, PAN_DENSE_MIN, DENSE, KIND, PAN_CROSS, DENSE_MIN, PAN_SPREAD, PAN_DECAY, PAN_SHIP, PAN_SHIP_MAX, PAN_HOPS, GREAT_SPREAD, GREAT_DECAY, SPREAD, IV_SPREAD, DECAY } = K;
+  const { GREAT_YEARS, ORIGIN_MIN, PORT_W, ORIGIN_NORM, GREAT_ODDS, PAN_SPARE, PAN_DENSE_MIN, DENSE, KIND, PAN_CROSS, DENSE_MIN, PAN_SPREAD, PAN_DECAY, PAN_SHIP, PAN_SHIP_MAX, PAN_HOPS, GREAT_SPREAD, GREAT_DECAY, SPREAD, IV_SPREAD, DECAY, ROADS, ROADS_MIN } = K;
+  /** 瘟疫随交通:州 r 此刻运输能力折成的几成(ROADS = 0 不看,恒为 1 —— 调用处不乘,和原来逐位一样) */
+  const road = (r: number): number => {
+    const d = devModelOf(sim);
+    const v = d ? d.cur[r * CAP_COUNT + 1] : 0;
+    return Math.max(ROADS_MIN, Math.min(1, ((Number.isFinite(v) ? v : 0) + 0.5) / ROADS));
+  };
   models.set(sim, pl);
   const { pm, base } = pl;
   const reg = pm.terrain.regions;
@@ -353,6 +363,7 @@ function hook(sim: CivSim, pl: PlagueModel, calamity: Calamity | undefined): voi
     const pop = sid >= 0 ? populationAt(pm.settlements[sid], t) : 0;
     const p = owner[r];
     const sail = p >= 0 && !!pm.port[r] && sailsOcean(pm, pm.polities[p], t);
+    if (ROADS > 0) vir *= road(r);
     if (ob.pan !== undefined) {
       // 全球大疫:小城也传得开(人烟最低算 PAN_DENSE_MIN);航线两头有一头的主人能远洋就有人走;每年各掷各的(g = 起疫后第几年)
       const dense = Math.max(PAN_DENSE_MIN, Math.min(1, pop / DENSE));
@@ -413,7 +424,7 @@ function hook(sim: CivSim, pl: PlagueModel, calamity: Calamity | undefined): voi
         const odds = (1 - fpow(1 - PAN_SHIP, Math.min(ships, PAN_SHIP_MAX))) * fpow(PAN_DECAY, g);
         for (let j = 0; j < R; j++) {
           if (ob.hit[j] || !pm.port[j] || cityNow(j, t) < 0 || spared(ob, j)) continue;
-          if (keyed4(base, ob.k, reg.seat[j], 0, U_PAN_SHIP + 16 * g) >= odds) continue;
+          if (keyed4(base, ob.k, reg.seat[j], 0, U_PAN_SHIP + 16 * g) >= (ROADS > 0 ? odds * road(j) : odds)) continue;
           ob.hit[j] = 1;
           add.push(j);
         }

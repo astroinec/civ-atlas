@@ -644,6 +644,12 @@ function ivText(civ: Civ, v: Intervention): string {
       return `${folk(v.folk)} 不许大迁徙${until(v.until)}`;
     case 'appoint':
       return `${id(v.a, 'polity', 'P')} 任作者的人物为${v.role === 'general' ? '将领' : '名臣'}${until(v.until)}`;
+    case 'mission':
+      return `${id(v.b, 'polity', 'P')} 所奉之教往 ${id(v.a, 'polity', 'P')} 传教,快 ${v.mul} 倍${until(v.until)}`;
+    case 'urge':
+      return `${id(v.a, 'polity', 'P')} 倡议第 ${v.idea + 1} 种学说${until(v.until)}`;
+    case 'sway':
+      return `${id(v.a, 'polity', 'P')} 议事施压(${v.issue}, ${v.side})${until(v.until)}`;
   }
 }
 
@@ -1450,6 +1456,9 @@ class Checker {
 }
 
 const KIND_LABEL: Record<Intervention['kind'], string> = {
+  mission: '传教',
+  urge: '倡议学说',
+  sway: '议事施压',
   protect: '保护',
   unity: '禁止分裂',
   halt: '禁止扩张',

@@ -35,6 +35,7 @@ import type { Civ, IdeoEvent, Ideology, IdeoState, Year } from './types';
 import type { TableCard } from './engine/tables';
 import { AdjKind, Layer } from './types';
 import type { CivSim } from './engine/sim';
+import { URGE_FOOT, URGE_MIX, swaySegs } from './authorSway';
 import { TableEngine } from './engine/tables';
 import { CAP_COUNT, CAPS, INVENTIONS, RESOURCE_COUNT, Res, devModelOf, type DevModel } from './development';
 import { populationAt } from './growth';
@@ -429,6 +430,16 @@ function tick(sim: CivSim, m: IdeoModel, y: Year, prev: Float64Array): void {
     for (let k = 0; k < K; k++) {
       const v = eng.value('思潮', r, k);
       eng.write('思潮', r, k, v + MIGRANT_MIX * (eng.value('国中', p, k) - v));
+    }
+  }
+
+  // 作者的倡议学说(authorSway.ts):这一步里管着的,那国已传进来的州往 1 靠一截(没有倡议 = 不动,和原来逐位一样)
+  for (const u of swaySegs(sim, 'urge')) {
+    if (u.from > y || u.until <= t0 || u.k < 0 || u.k >= K) continue;
+    for (let r = 0; r < R; r++) {
+      if (ownP[r] !== u.p) continue;
+      const v = eng.value('思潮', r, u.k);
+      if (v >= URGE_FOOT) eng.write('思潮', r, u.k, v + URGE_MIX * (1 - v));
     }
   }
 
