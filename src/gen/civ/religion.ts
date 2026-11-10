@@ -764,7 +764,8 @@ function spreadStep(
       const kind = adjKind[k];
       if (kind === AdjKind.SeaRoute || kind === AdjKind.Strait) p *= SEA;
       else if (kind === AdjKind.Mountain) p *= MOUNTAIN;
-      if (missions && pn >= 0) for (const m of missions) if (m.p === pn && (m.k === f || rootArr[f] === m.k)) p *= m.w;
+      // 作者的传教:那国有人传这一教,跨国界不打折(当成国内传),再 × 倍数
+      if (missions && pn >= 0) for (const m of missions) if (m.p === pn && (m.k === f || rootArr[f] === m.k)) p *= m.w * (pn === pr ? 1 : 1 / CROSS_BORDER);
       if (keyed(seed, 10 + y, r, n) < p) next[n] = f;
     }
   }
