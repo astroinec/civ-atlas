@@ -51,7 +51,7 @@ import { bookChain, quantize, type CivSim } from './engine/sim';
 import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, powerScaleOf, type PolityModel } from './polities';
 import { POLICY_KNOBS } from './policy';
 import { MARRIAGES_KNOBS } from './marriages';
-import { polityBorders, warModelOf, type War, type WarModel } from './wars';
+import { polityBorders, polityReach, warModelOf, type War, type WarModel } from './wars';
 import { capitalAt, polityAlive, populationAt } from './growth';
 import { politicsModelOf } from './politics';
 import { RISE_KNOBS } from './riseRules';
@@ -360,6 +360,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   const atWar = (p: number) => wm.active.some((w) => w.a === p || w.b === p);
   const fighting = (p: number, q: number) => wm.active.some((w) => (w.a === p && w.b === q) || (w.a === q && w.b === p));
   const borders = (x: number, y: number) => polityBorders(pm, owner, x, y, sim.now);
+  /** 借道援救(riseRules.ts):z 能不能借道走到攻方 x 的边上(沿途的国没和 z 交战、不是 x 的盟国 / 藩属) */
+  const reach = (z: number, x: number, y: number, t: number) =>
+    polityReach(pm, owner, z, x, y, t, pm.knobs.get(RISE_KNOBS).FAR_HOPS, (q) => q !== x && !fighting(q, z) && !dm.alliesOf(x).includes(q) && dm.liegeOf(q) !== x);
   const capRegion = (p: number, t: number) => pm.settlements[capitalAt(pm.polities[p], t)].region;
   const halted = (p: number, t: number) => !!wm.iv?.halted(p, t);
   /** 国力:城镇人口之和(千人;至少 1;按出兵的几成打折)× 军力系数,和 wars.ts 一样按州号顺序加。一次看邦交里记住算过的(这期间归属不变) */
@@ -603,16 +606,21 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     }
     for (const z of dm.alliesOf(y)) {
       // 国家方针(policy.ts):z 把攻方当亲国的不出兵(盟约不断);把守方当亲国的更肯出兵,当仇国的不救(盟约就此断了)
-      if (z === x || !alive(z) || friendly(z, x, t) || befriends(pm, z, x, t) || fighting(z, x) || halted(z, t) || busy(z) || !borders(z, x)) continue;
+      if (z === x || !alive(z) || friendly(z, x, t) || befriends(pm, z, x, t) || fighting(z, x) || halted(z, t) || busy(z)) continue;
+      // 不接壤的:新立国规则下可以借道(riseRules.ts),机会打折;借不到道的不算坐视不救
+      const near = borders(z, x);
+      if (!near && !(t >= rk.FROM2 && reach(z, x, y, t))) continue;
       let join = hates(pm, z, y, t) ? 0 : befriends(pm, z, y, t) ? FRIEND_JOIN : PACT_JOIN;
+      if (!near) join *= rk.FAR_JOIN;
       // 结着亲的更肯出兵(marriage.ts)
       if (join > 0 && api.diplomacy.bond) join *= 1 + (KIN_JOIN - 1) * api.diplomacy.bond(z, y, t);
       if (keyed4(dm.base, pm.ptag[z], pm.ptag[x], Math.round(t * 256), U_JOIN) < join) api.war.declare!(z, x, t, y, 'ally');
       else record('unally', { a: z, b: y, war: w.id, cause: 'abandon' });
     }
     const L = dm.liegeOf(y);
-    if (L >= 0 && L !== x && !friendly(L, x, t) && !befriends(pm, L, x, t) && !fighting(L, x) && !halted(L, t) && !busy(L) && borders(L, x)) {
-      if (keyed4(dm.base, pm.ptag[L], pm.ptag[x], Math.round(t * 256), U_RESCUE) < RESCUE) api.war.declare!(L, x, t, y, 'rescue');
+    if (L >= 0 && L !== x && !friendly(L, x, t) && !befriends(pm, L, x, t) && !fighting(L, x) && !halted(L, t) && !busy(L)) {
+      const near = borders(L, x);
+      if ((near || (t >= rk.FROM2 && reach(L, x, y, t))) && keyed4(dm.base, pm.ptag[L], pm.ptag[x], Math.round(t * 256), U_RESCUE) < RESCUE * (near ? 1 : rk.FAR_JOIN)) api.war.declare!(L, x, t, y, 'rescue');
     }
   };
 

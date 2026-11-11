@@ -191,6 +191,7 @@ add(
   mult({ id: 'split.edge', name: '边地自己立国' }, { off: true }),
   num({ id: 'split.riseFrom', name: '新立国规则起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.rushUntil', name: '立国潮截止年' }, { official: 0, min: 0, max: 65535, step: 1, unit: '年' }),
+  num({ id: 'split.limitFrom', name: '治理极限与借道援救起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.age', name: '王朝老了人心渐散' }, { official: 0.6, min: 0, max: 2, step: 0.1, unit: '' }),
 );
 
@@ -293,7 +294,7 @@ for (let i = 0; i < ITEMS.length; i++) {
   if (into !== undefined) ITEMS[i] = { ...ITEMS[i], retired: true, ...(into ? { into } : {}) };
 }
 
-/** 全部 75 项(照组、常用在前的先后;连页面上拿掉的) */
+/** 全部 76 项(照组、常用在前的先后;连页面上拿掉的) */
 export const TUNING_ITEMS: readonly TuningItem[] = ITEMS;
 /** 页面上列的项(拿掉的不算;照组、常用在前的先后) */
 export const SHOWN_ITEMS: readonly TuningItem[] = ITEMS.filter((x) => !x.retired);

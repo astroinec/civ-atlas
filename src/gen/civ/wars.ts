@@ -763,6 +763,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
 
   /** x、y 的国土接壤(x 能走过去的边) */
   const borders = (x: number, y: number): boolean => polityBorders(pm, owner, x, y, sim.now);
+  /** 借道援救:z 能不能借道走到攻方 x 的边上(沿途的国没和 z 交战、不是 x 的盟国 / 藩属) */
+  const reachFor = (z: number, x: number, y: number, t: number): boolean =>
+    polityReach(pm, owner, z, x, y, t, riseK.FAR_HOPS, (q) => q !== x && !wm.active.some((v) => (v.a === q && v.b === z) || (v.a === z && v.b === q)) && !wm.iv?.allied(q, x, t) && !(wm.dm?.liegeOf?.(q) === x));
 
   const declare = (x: number, y: number, t: number, ally = -1, cause?: AnnalCause, res?: { region: number; want: number }): War => {
     const w: War = { id: wm.wars.length, a: x, b: y, start: t, takes: [] };
@@ -778,9 +781,12 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (iv && ally < 0) {
       for (const z of iv.alliesOf(y, t)) {
         if (z === x || pm.polities[z].ended !== undefined || iv.allied(z, x, t) || wm.dm?.friendly(z, x) || iv.halted(z, t) || befriends(pm, z, x, t)) continue;
-        if (wm.active.some((v) => (v.a === z && v.b === x) || (v.a === x && v.b === z)) || !borders(z, x)) continue;
+        if (wm.active.some((v) => (v.a === z && v.b === x) || (v.a === x && v.b === z))) continue;
+        // 不接壤的:新立国规则下可以借道(riseRules.ts),机会打折
+        const near = borders(z, x);
+        if (!near && !(t >= riseK.FROM2 && reachFor(z, x, y, t))) continue;
         // 国家方针:z 把 y 当亲国的更肯出兵(policy.ts)
-        if (keyed4(iv.base, pm.ptag[z], pm.ptag[x], Math.round(t * 256), U_ALLY) >= (befriends(pm, z, y, t) ? Math.max(ALLY_JOIN, FRIEND_JOIN) : ALLY_JOIN)) continue;
+        if (keyed4(iv.base, pm.ptag[z], pm.ptag[x], Math.round(t * 256), U_ALLY) >= (befriends(pm, z, y, t) ? Math.max(ALLY_JOIN, FRIEND_JOIN) : ALLY_JOIN) * (near ? 1 : riseK.FAR_JOIN)) continue;
         declare(z, x, t, y, 'ally');
       }
     }
@@ -1299,6 +1305,34 @@ export function bestCapital(pm: PolityModel, owner: Int16Array, y: number, t: Ye
 }
 
 /** 国家 x、y 在 t 这一刻国土接壤(陆上相邻;x 能出海时隔着海峡、航线也算,和看邻国时一样按 x 能走的边) */
+/**
+ * 借道(新立国规则,riseRules.ts):z 的兵能不能走到 x 的边上。从 z 的国土出发,只经过 z、守方 y、无主之地、pass(q) 为真的国家的州,
+ * 最多 hops 步走到挨着 x 的地方 = true(z 自己会不会渡海照 canCross)
+ */
+export function polityReach(pm: PolityModel, owner: Int16Array, z: number, x: number, y: number, t: Year, hops: number, pass: (q: number) => boolean): boolean {
+  const reg = pm.terrain.regions;
+  const Z = pm.polities[z];
+  const seen = new Map<number, number>();
+  let front: number[] = pm.lands[z].slice();
+  for (const r of front) seen.set(r, 0);
+  for (let d = 0; d < hops && front.length; d++) {
+    const next: number[] = [];
+    for (const r of front) {
+      for (let k = reg.adjStart[r]; k < reg.adjStart[r + 1]; k++) {
+        const n = reg.adj[k];
+        if (seen.has(n) || !canCross(pm, Z, reg.adjKind[k], t)) continue;
+        const q = owner[n];
+        if (q === x) return true;
+        if (!(q < 0 || q === z || q === y || pass(q))) continue;
+        seen.set(n, d + 1);
+        next.push(n);
+      }
+    }
+    front = next;
+  }
+  return false;
+}
+
 export function polityBorders(pm: PolityModel, owner: Int16Array, x: number, y: number, t: Year): boolean {
   const reg = pm.terrain.regions;
   const X = pm.polities[x];

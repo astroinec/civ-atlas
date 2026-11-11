@@ -521,15 +521,18 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     }
     if (r0 < 0) return false;
     const d0 = dis[r0];
-    const odds0 = SPLIT_ODDS * fexp(SPLIT_K * (d0 + g - SPLIT_D0));
+    // 治理极限(新立国规则第二批,riseRules.ts):分裂门槛低一截、赔率高一截
+    const lim = t >= pm.knobs.get(RISE_KNOBS).FROM2 ? pm.knobs.get(RISE_KNOBS) : null;
+    const odds0 = SPLIT_ODDS * fexp(SPLIT_K * (d0 + g - SPLIT_D0 + (lim ? lim.LIMIT_D0_CUT : 0))) * (lim ? lim.LIMIT_SPLIT_MUL : 1);
     const oddsIn = sim.influence?.get('split.odds');
     const odds = oddsIn ? odds0 * mulOf(oddsIn, pid) : odds0;
     if (keyed(pol.base, pm.ptag[pid], k, U_SPLIT) >= odds / (1 + odds)) return false;
     // 自立出去的最多占国土的 SPLIT_FRAC,凑不够 SPLIT_MIN_GROUP 州的不起兵(官方的数下,够分裂的国家都凑得够)
-    if (Math.floor(N * SPLIT_FRAC) < SPLIT_MIN_GROUP) return false;
+    const minG = lim ? lim.LIMIT_MIN_GROUP : SPLIT_MIN_GROUP;
+    if (Math.floor(N * SPLIT_FRAC) < minG) return false;
     // 从起事的州往外长:离心力大的先并进来,只走陆路(国土成片)
     const limit = Math.min(SPLIT_MAX_GROUP, Math.floor(N * SPLIT_FRAC));
-    const thr = Math.max(GROUP_MIN_D, d0 - GROUP_DROP);
+    const thr = Math.max(lim ? lim.LIMIT_GROUP_MIN_D : GROUP_MIN_D, d0 - GROUP_DROP);
     // 先挑:离心力大的、和起事的州同族的、离起事的州近的(每隔一州扣 GROUP_COMPACT:国土成团,不沿着边远一圈拉成长条)
     const stamp = ++gStamp;
     const heap = new MinHeap(32);
@@ -553,7 +556,7 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     }
     // 没挑上的候选撤掉标记
     while (heap.size) inG[heap.pop()] = 0;
-    if (group.length < SPLIT_MIN_GROUP) return false;
+    if (group.length < minG) return false;
     // 新国都 = 起兵的这些州里人口最多的城(不挑后来并进来的碎块)
     const sid = biggestCity(group, t);
     if (sid < 0) return false;

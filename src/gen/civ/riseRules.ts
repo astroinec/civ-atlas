@@ -13,6 +13,8 @@ export const RISE_KNOBS = defineKnobs('rise', {
   FROM: 65535,
   /** 立国潮:到这一年(不含)为止,够格的大城、边地一律立国(不掷机会、不限个数);0 = 没有 */
   RUSH_UNTIL: 0,
+  /** 第二批(疆域超出治理能力、借道援救)从这一年起生效(规则项 split.limitFrom);65535 = 不用 */
+  FROM2: 65535,
   GRACE: 5,
   DIP_FIRST: 1,
   /** 丢了国都、只剩不到这么多州才撑不下去(原 wars.MIN_STATE = 4:小国丢一州就亡) */
@@ -29,4 +31,24 @@ export const RISE_KNOBS = defineKnobs('rise', {
   VASSAL_SPLIT: 0.5,
   VASSAL_FOREIGN: 0.5,
   VASSAL_COLLAPSE: 0.5,
+  /**
+   * 疆域超出治理能力(control.ts 的动荡):能稳管的州数 = OVER_BASE + OVER_PER × 国都的行政能力(0–9);
+   * 超出几成,动荡加 OVER_W × 超出的倍数(最多 OVER_MAX)。动荡高了:分裂、割据、民变、大崩解、被邻国趁虚而入都更容易(这些原有的规则都读动荡)
+   */
+  OVER_BASE: 6,
+  OVER_PER: 3,
+  OVER_W: 1,
+  OVER_MAX: 1.5,
+  /**
+   * 借道援救:盟国、宗主不和攻方接壤,也能借道出兵——从自己的国土走陆路 / 已会的海路,沿途只经过自己、守方、无主之地、
+   * 或肯借道的国家(没和自己交战、不是攻方的盟国 / 藩属),最多 FAR_HOPS 州;出兵的机会再乘 FAR_JOIN
+   */
+  /** 治理极限下大国更易分裂:分裂门槛 SPLIT_D0 降 LIMIT_D0_CUT、赔率再乘 LIMIT_SPLIT_MUL(politics.ts) */
+  LIMIT_D0_CUT: 0.4,
+  LIMIT_SPLIT_MUL: 1.5,
+  /** 起兵成团的门槛放低:离心力够 LIMIT_GROUP_MIN_D 的州就肯跟着走,凑够 LIMIT_MIN_GROUP 州就能自立(原 1.0、5 州) */
+  LIMIT_GROUP_MIN_D: 0.6,
+  LIMIT_MIN_GROUP: 3,
+  FAR_HOPS: 14,
+  FAR_JOIN: 0.6,
 });

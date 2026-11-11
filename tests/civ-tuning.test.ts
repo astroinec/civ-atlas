@@ -19,11 +19,11 @@ const table = (k: string) => {
 
 describe('规则项表', () => {
   it('70 项、7 组、常用 28 项;编号不重复、写法固定;每组都有常用的', () => {
-    expect(TUNING_ITEMS.length).toBe(75);
+    expect(TUNING_ITEMS.length).toBe(76);
     expect(TUNING_ITEMS.filter((x) => x.common).length).toBe(28);
     expect(TUNING_GROUPS.length).toBe(7);
     const ids = TUNING_ITEMS.map((x) => x.id);
-    expect(new Set(ids).size).toBe(75);
+    expect(new Set(ids).size).toBe(76);
     for (const x of TUNING_ITEMS) {
       expect(x.id).toMatch(/^[a-z]+\.[a-z][a-zA-Z]*$/);
       expect(x.id.split('.')[0]).toBe(x.group);
@@ -188,7 +188,7 @@ describe('页面上拿掉的项、第 4 版换算', () => {
       'war.rest', 'war.goal', 'war.break', 'war.fronts', 'war.revanche', 'war.grudge', 'split.share', 'split.age',
       'diplo.maxPacts', 'diplo.zone', 'folk.trekAbsorb', 'disaster.wear', 'court.maxAge', 'court.restore',
     ]);
-    expect(SHOWN_ITEMS.length).toBe(61);
+    expect(SHOWN_ITEMS.length).toBe(62);
     for (const x of gone) {
       expect(x.common, x.id).toBe(false);
       if (!x.into) continue;

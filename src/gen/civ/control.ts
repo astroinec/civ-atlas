@@ -71,6 +71,7 @@ import { civApi } from './api';
 import { defineKnobs, type KnobSet } from './engine/knobs';
 import { TABLE_GROUP } from './tableGroups';
 import { mulOf } from './influence';
+import { RISE_KNOBS } from './riseRules';
 
 // ---- 调参(以 20 个种子的统计为准,见 scripts/control-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -656,7 +657,20 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
 
   // ---- 动荡:读表(这一年里才立的国还没算过 = 0);民变时这次饥荒先加上(表里下一年才算进去) ----
   // 照大纲顺着引的动荡加减(policy.ts)读的时候加上:引的那一刻就算,不等下一年
-  const guided = (p: number, t: number, u: number): number => {
+  const riseK = pm.knobs.get(RISE_KNOBS);
+  /** 疆域超出治理能力加的动荡(新立国规则;riseRules.ts):没生效 = 0,和原来逐位一样 */
+  const overOf = (p: number, t: number): number => {
+    if (t < riseK.FROM2 || !riseK.OVER_W) return 0;
+    const P = pm.polities[p];
+    if (!P || P.ended !== undefined) return 0;
+    const dev = devModelOf(sim);
+    const v = dev ? dev.cur[capRegion(P, t) * CAP_COUNT + Cap.Administration] : 0;
+    const cap = riseK.OVER_BASE + riseK.OVER_PER * Math.max(0, Number.isFinite(v) ? v : 0);
+    const over = riseK.OVER_W * Math.min(riseK.OVER_MAX, Math.max(0, pm.size[p] / cap - 1));
+    return over;
+  };
+  const guided = (p: number, t: number, u0: number): number => {
+    const u = u0 + overOf(p, t);
     const g = unrestShiftOf(pm, p, t);
     return g ? Math.max(0, u + GUIDE_UNREST * g) : u;
   };
