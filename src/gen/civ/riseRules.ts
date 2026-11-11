@@ -11,6 +11,8 @@ import { defineKnobs } from './engine/knobs';
  */
 export const RISE_KNOBS = defineKnobs('rise', {
   FROM: 65535,
+  /** 立国潮:到这一年(不含)为止,够格的大城、边地一律立国(不掷机会、不限个数);0 = 没有 */
+  RUSH_UNTIL: 0,
   GRACE: 5,
   DIP_FIRST: 1,
   /** 丢了国都、只剩不到这么多州才撑不下去(原 wars.MIN_STATE = 4:小国丢一州就亡) */

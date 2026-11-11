@@ -181,10 +181,10 @@ export const POLITICS_KNOBS = defineKnobs('politics', {
    *      只要离各国国都不到 BIG_SPACING × 国都间距就不行(原来是不到 1 倍就不行,一刀切),每次看有 BIG_P 的机会自己立国(不必挨着大国)
    *   ② 边缘立国更勤:机会 × EDGE_MUL,离国都的要求放宽成 EDGE_SPACING_RISE × 国都间距
    */
-  BIG_CAP: 80,
-  BIG_POP: 15,
+  BIG_CAP: 50,
+  BIG_POP: 12,
   BIG_AGE: 250,
-  BIG_SPACING: 0.4,
+  BIG_SPACING: 0.3,
   BIG_P: 0.25,
   /** 每次看部落地带,大城自立最多立几个(从最大的城起;免得一次冒出一堆) */
   BIG_MAX: 2,
@@ -866,7 +866,10 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
         sim.schedule(t, Ev.PolityFound, r, s.id);
         continue;
       }
-      const rise = t >= pm.knobs.get(RISE_KNOBS).FROM;
+      const rk = pm.knobs.get(RISE_KNOBS);
+      const rise = t >= rk.FROM;
+      // 立国潮(rise.RUSH_UNTIL 之前):够格的大城、边地一律立国,不掷机会、不限个数
+      const rush = rise && t < rk.RUSH_UNTIL;
       const capsNow = (): Uint8Array => {
         if (!caps) {
           caps = new Uint8Array(R);
@@ -875,8 +878,8 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
         return caps;
       };
       // 大城自立(新立国规则):够大、够老的城,国都间距放宽成 BIG_SPACING 倍,不必挨着大国,有机会自己立国
-      if (rise && bigDone < BIG_MAX && capacityAt(s, t) >= BIG_CAP && populationAt(s, t) >= BIG_POP && t - s.founded >= BIG_AGE
-        && keyed(pol.base, pm.stag[s.id], k, U_BIG) < BIG_P && !nearCapital(r, BIG_SPACING * pm.spacing, capsNow())) {
+      if (rise && (rush || bigDone < BIG_MAX) && capacityAt(s, t) >= BIG_CAP && populationAt(s, t) >= BIG_POP && t - s.founded >= BIG_AGE
+        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < BIG_P) && !nearCapital(r, BIG_SPACING * pm.spacing, capsNow())) {
         const bm = mentorOf(r, t);
         const bnomad = pm.cultures[culture[r]].kind === 'nomad' || (bm >= 0 && pm.polities[bm].lineage === 'khanate');
         const p = addPolity(pm, s.id, culture[r], t, bm >= 0 ? (bnomad ? { mentor: bm } : { mentor: bm, lineage: pm.polities[bm].lineage }) : {});
@@ -892,7 +895,7 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       if (m < 0) continue;
       const M = pm.polities[m];
       const edgeP = rise ? Math.min(1, EDGE_P * EDGE_MUL) : EDGE_P;
-      if (keyed(pol.base, pm.stag[s.id], k, U_EDGE) >= (culture[r] === M.culture ? edgeP : edgeP / 2)) continue;
+      if (!rush && keyed(pol.base, pm.stag[s.id], k, U_EDGE) >= (culture[r] === M.culture ? edgeP : edgeP / 2)) continue;
       if (nearCapital(r, (rise ? EDGE_SPACING_RISE : EDGE_SPACING) * pm.spacing, capsNow())) continue;
       // 国号一系(王国 / 共和国)沿用那一国的;游牧的汗国和定居的国家不互相沿用
       const nomad = pm.cultures[culture[r]].kind === 'nomad' || M.lineage === 'khanate';
