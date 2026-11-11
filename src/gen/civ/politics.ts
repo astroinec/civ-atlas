@@ -65,6 +65,7 @@ import type { CivModule } from './modules';
 import { Ev } from './events';
 import { civApi } from './api';
 import { defineKnobs } from './engine/knobs';
+import { RISE_KNOBS } from './riseRules';
 import { mulOf } from './influence';
 
 // ---- 调参(以截图和统计数为准,见 scripts/gen-stats.ts) ----
@@ -174,6 +175,21 @@ export const POLITICS_KNOBS = defineKnobs('politics', {
   EDGE_AGE: 80,
   EDGE_SPACING: 0.6,
   EDGE_P: 0.12,
+  /**
+   * 新立国规则(规则项 split.riseFrom;从这一年起才生效,之前的历史照旧;65535 = 不用):
+   *   ① 大城自立:部落地带里人口上限 ≥ BIG_CAP、人口 ≥ BIG_POP、建城满 BIG_AGE 年的大城,
+   *      只要离各国国都不到 BIG_SPACING × 国都间距就不行(原来是不到 1 倍就不行,一刀切),每次看有 BIG_P 的机会自己立国(不必挨着大国)
+   *   ② 边缘立国更勤:机会 × EDGE_MUL,离国都的要求放宽成 EDGE_SPACING_RISE × 国都间距
+   */
+  BIG_CAP: 80,
+  BIG_POP: 15,
+  BIG_AGE: 250,
+  BIG_SPACING: 0.4,
+  BIG_P: 0.25,
+  /** 每次看部落地带,大城自立最多立几个(从最大的城起;免得一次冒出一堆) */
+  BIG_MAX: 2,
+  EDGE_MUL: 1.5,
+  EDGE_SPACING_RISE: 0.5,
 });
 
 
@@ -193,6 +209,8 @@ const U_RESTORE_T = 6;
 const U_RESTORE = 7;
 const U_TRIBAL_T = 8;
 const U_EDGE = 9;
+const U_BIG = 10;
+const U_VASSAL = 11;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -280,7 +298,7 @@ export function installPolitics(sim: CivSim, pm: PolityModel, world: World): Pol
 }
 
 function hook(sim: CivSim, pol: PoliticsModel): void {
-  const { CRISIS_YEARS, SETTLE, SIZE_D, SPLIT_MIN_SIZE, CRISIS_CAPITAL, CRISIS_WAR, CRISIS_LOSS, SPLIT_AGE, SPLIT_REST, DYNASTY_YEARS, CRISIS_DYNASTY, SPLIT_REACH, LORD_D, FOREIGN_D, RECENT, RECENT_D, RISE_JITTER, SPLIT_ODDS, SPLIT_K, SPLIT_D0, SPLIT_MAX_GROUP, SPLIT_MIN_GROUP, SPLIT_FRAC, GROUP_MIN_D, GROUP_DROP, GROUP_KIN, GROUP_COMPACT, MERGE_SMALL, MERGE_AGE, MERGE_RATIO, MERGE_ODDS, CAPMOVE_MIN, CAPMOVE_AGE, CAPMOVE_REST, ECC_PRE, CENTER_L, CAPMOVE_POP, CAPMOVE_TOP, ECC_RATIO, FRONT_RATIO, CAPMOVE_P, RESTORE_MIN_OWNER, W_WAR, RECENT_SPLIT, W_SPLIT, W_CAP, W_LOSS, RESTORE_FOREIGN, RESTORE_ODDS, RESTORE_MAX_GROUP, RESTORE_MIN_GROUP, RESTORE_FRAC, RESTORE_TRIES, EDGE_MENTOR_AGE, EDGE_MENTOR_SIZE, EDGE_CAP, EDGE_AGE, EDGE_POP, EDGE_P, EDGE_SPACING } = pol.k;
+  const { CRISIS_YEARS, SETTLE, SIZE_D, SPLIT_MIN_SIZE, CRISIS_CAPITAL, CRISIS_WAR, CRISIS_LOSS, SPLIT_AGE, SPLIT_REST, DYNASTY_YEARS, CRISIS_DYNASTY, SPLIT_REACH, LORD_D, FOREIGN_D, RECENT, RECENT_D, RISE_JITTER, SPLIT_ODDS, SPLIT_K, SPLIT_D0, SPLIT_MAX_GROUP, SPLIT_MIN_GROUP, SPLIT_FRAC, GROUP_MIN_D, GROUP_DROP, GROUP_KIN, GROUP_COMPACT, MERGE_SMALL, MERGE_AGE, MERGE_RATIO, MERGE_ODDS, CAPMOVE_MIN, CAPMOVE_AGE, CAPMOVE_REST, ECC_PRE, CENTER_L, CAPMOVE_POP, CAPMOVE_TOP, ECC_RATIO, FRONT_RATIO, CAPMOVE_P, RESTORE_MIN_OWNER, W_WAR, RECENT_SPLIT, W_SPLIT, W_CAP, W_LOSS, RESTORE_FOREIGN, RESTORE_ODDS, RESTORE_MAX_GROUP, RESTORE_MIN_GROUP, RESTORE_FRAC, RESTORE_TRIES, EDGE_MENTOR_AGE, EDGE_MENTOR_SIZE, EDGE_CAP, EDGE_AGE, EDGE_POP, EDGE_P, EDGE_SPACING, BIG_CAP, BIG_POP, BIG_AGE, BIG_SPACING, BIG_P, EDGE_MUL, EDGE_SPACING_RISE, BIG_MAX } = pol.k;
   const api = civApi(sim);
   models.set(sim, pol);
   const { pm, wm } = pol;
@@ -444,11 +462,21 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     if (kind === 'split') pol.lastSplit.set(parent, t);
     return p;
   };
+  const capR0 = (sid: number) => pm.settlements[sid].region;
   api.politics.secede = (parent, group, sid, rising, t, kind, cause, extra) => {
     // 新国都是某个同族亡国的故都:这一次起兵就是复国(宗室据地争位、革命据地自立的不算)
     const f = kind === 'split' && cause !== 'heir' && cause !== 'revolution' ? heirOf(sid, t) : null;
     const p = secede(parent, group, sid, rising, t, f ? { restores: f.id, lineage: f.lineage } : (extra ?? {}), kind, cause);
     if (f) pol.restored.add(f.id);
+    // 分藩(新立国规则,riseRules.ts):大国管不过来的边地分出去后,原国还比它大得多、没在打仗,不少仍向原国称臣
+    // (宗室争位、革命、复国、民变不算;日后宗主衰弱或藩属壮大,diplomacy.ts 原有的藩属自立会让它脱离)
+    const rk = pm.knobs.get(RISE_KNOBS);
+    if (t >= rk.FROM && kind === 'split' && !f && cause !== 'heir' && cause !== 'revolution' && pm.polities[parent].ended === undefined
+      && pm.size[parent] >= rk.VASSAL_SIZE * pm.size[p.id] && !wm.wars.some((x) => x.end === undefined && (x.a === parent || x.b === parent))) {
+      let odds = rk.VASSAL_SPLIT * (culture[capR0(sid)] === pm.polities[parent].culture ? 1 : rk.VASSAL_FOREIGN);
+      if (cause === 'collapse') odds *= rk.VASSAL_COLLAPSE;
+      if (keyed(pol.base, pm.stag[sid], Math.round(t * 16), U_VASSAL) < odds) api.diplomacy.vassalize?.(p.id, parent, t);
+    }
     return p;
   };
   api.politics.cutOff = (pid, group, t, cap) => {
@@ -827,7 +855,10 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
   sim.on(Ev.TribalCheck, (k, _b, t) => {
     sim.schedule(tribalTime(pol, k + 1), Ev.TribalCheck, k + 1, 0);
     let caps: Uint8Array | null = null;
-    for (const s of pm.settlements) {
+    let bigDone = 0;
+    // 新立国规则下先看最大的城(同样大的按编号),大城自立每次最多 BIG_MAX 个
+    const order = t >= pm.knobs.get(RISE_KNOBS).FROM ? [...pm.settlements].sort((a, b) => capacityAt(b, t) - capacityAt(a, t) || a.id - b.id) : pm.settlements;
+    for (const s of order) {
       const r = s.region;
       if (s.capitalFrom !== undefined || s.ended !== undefined || owner[r] >= 0 || culture[r] < 0 || api.polity.closed?.(r, -1, t)) continue;
       // 自己的"立国"事件已经处理过(当时没立成);同一刻的还在排队,不重复预约
@@ -835,23 +866,40 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
         sim.schedule(t, Ev.PolityFound, r, s.id);
         continue;
       }
+      const rise = t >= pm.knobs.get(RISE_KNOBS).FROM;
+      const capsNow = (): Uint8Array => {
+        if (!caps) {
+          caps = new Uint8Array(R);
+          for (const P of pm.polities) if (P.ended === undefined) caps[capRegion(P.id, t)] = 1;
+        }
+        return caps;
+      };
+      // 大城自立(新立国规则):够大、够老的城,国都间距放宽成 BIG_SPACING 倍,不必挨着大国,有机会自己立国
+      if (rise && bigDone < BIG_MAX && capacityAt(s, t) >= BIG_CAP && populationAt(s, t) >= BIG_POP && t - s.founded >= BIG_AGE
+        && keyed(pol.base, pm.stag[s.id], k, U_BIG) < BIG_P && !nearCapital(r, BIG_SPACING * pm.spacing, capsNow())) {
+        const bm = mentorOf(r, t);
+        const bnomad = pm.cultures[culture[r]].kind === 'nomad' || (bm >= 0 && pm.polities[bm].lineage === 'khanate');
+        const p = addPolity(pm, s.id, culture[r], t, bm >= 0 ? (bnomad ? { mentor: bm } : { mentor: bm, lineage: pm.polities[bm].lineage }) : {});
+        sim.setOwner(Layer.Polity, r, p.id, Ev.PolityFound);
+        sim.record('found', bm >= 0 ? { a: p.id, b: bm, region: r, settlement: s.id } : { a: p.id, region: r, settlement: s.id });
+        capsNow()[r] = 1;
+        bigDone++;
+        continue;
+      }
       // 边缘立国:挨着站稳了的国家,受它影响提早立国
       if (capacityAt(s, t) < EDGE_CAP || t - s.founded < EDGE_AGE || populationAt(s, t) < EDGE_POP) continue;
       const m = mentorOf(r, t);
       if (m < 0) continue;
       const M = pm.polities[m];
-      if (keyed(pol.base, pm.stag[s.id], k, U_EDGE) >= (culture[r] === M.culture ? EDGE_P : EDGE_P / 2)) continue;
-      if (!caps) {
-        caps = new Uint8Array(R);
-        for (const P of pm.polities) if (P.ended === undefined) caps[capRegion(P.id, t)] = 1;
-      }
-      if (nearCapital(r, EDGE_SPACING * pm.spacing, caps)) continue;
+      const edgeP = rise ? Math.min(1, EDGE_P * EDGE_MUL) : EDGE_P;
+      if (keyed(pol.base, pm.stag[s.id], k, U_EDGE) >= (culture[r] === M.culture ? edgeP : edgeP / 2)) continue;
+      if (nearCapital(r, (rise ? EDGE_SPACING_RISE : EDGE_SPACING) * pm.spacing, capsNow())) continue;
       // 国号一系(王国 / 共和国)沿用那一国的;游牧的汗国和定居的国家不互相沿用
       const nomad = pm.cultures[culture[r]].kind === 'nomad' || M.lineage === 'khanate';
       const p = addPolity(pm, s.id, culture[r], t, nomad ? { mentor: m } : { mentor: m, lineage: M.lineage });
       sim.setOwner(Layer.Polity, r, p.id, Ev.PolityFound);
       sim.record('found', { a: p.id, b: m, region: r, settlement: s.id });
-      caps[r] = 1;
+      capsNow()[r] = 1;
     }
   });
 }

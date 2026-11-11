@@ -189,6 +189,7 @@ add(
   num({ id: 'split.newborn', name: '新立的国站稳几年' }, { official: 30, min: 0, max: 150, step: 5, unit: '年' }),
   mult({ id: 'split.capMove', name: '主动迁都' }, { off: true }),
   mult({ id: 'split.edge', name: '边地自己立国' }, { off: true }),
+  num({ id: 'split.riseFrom', name: '新立国规则起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.age', name: '王朝老了人心渐散' }, { official: 0.6, min: 0, max: 2, step: 0.1, unit: '' }),
 );
 
@@ -241,6 +242,7 @@ add(
   mult({ id: 'disaster.spread', name: '瘟疫传得快慢' }),
   num({ id: 'disaster.great', name: '大瘟疫的几率' }, { official: 0.3, min: 0, max: 1, step: 0.05, unit: '成' }),
   num({ id: 'disaster.roads', name: '瘟疫随交通' }, { official: 0, min: 0, max: 6, step: 0.5, unit: '档' }),
+  num({ id: 'disaster.normalFrom', name: '恢复正常天灾年份' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   mult({ id: 'disaster.growth', name: '城长得快慢' }),
   mult({ id: 'disaster.wear', name: '种地耗地力' }, { off: true }),
 );
@@ -290,7 +292,7 @@ for (let i = 0; i < ITEMS.length; i++) {
   if (into !== undefined) ITEMS[i] = { ...ITEMS[i], retired: true, ...(into ? { into } : {}) };
 }
 
-/** 全部 72 项(照组、常用在前的先后;连页面上拿掉的) */
+/** 全部 74 项(照组、常用在前的先后;连页面上拿掉的) */
 export const TUNING_ITEMS: readonly TuningItem[] = ITEMS;
 /** 页面上列的项(拿掉的不算;照组、常用在前的先后) */
 export const SHOWN_ITEMS: readonly TuningItem[] = ITEMS.filter((x) => !x.retired);

@@ -171,6 +171,8 @@ export interface DiplomacyApi {
   limits?: (q: number, L: number) => boolean;
   /** 立约(treaties.ts 提供):看邦交时称臣、结盟都没成,接着看要不要和邻国立约(threat = 最怕的强邻,−1 = 没有) */
   onCheck?: (p: number, k: number, t: Year, threat: number) => void;
+  /** 分藩(新立国规则):刚分出去的 v 仍向原国 L 称臣;成了 = true */
+  vassalize?: (v: number, L: number, t: Year) => boolean;
 }
 
 /** dev那一组(原来挂在 DevModel 上) */

@@ -54,6 +54,7 @@ import {
   PAN_LOSS_MAX,
   PLAGUE_IV,
   PLAGUE_LOSS_CAP,
+  normalDisasters,
   calamityRates,
   naturalPandemic,
   pandemicBase,
@@ -251,6 +252,7 @@ function hook(sim: CivSim, pl: PlagueModel, calamity: Calamity | undefined): voi
   const um = unrestModelOf(sim);
   /** 「天灾」多 / 很多的倍数(平常 = null:照旧的规则,不走这些分支) */
   const rate = calamityRates(calamity);
+  const rateAt = (t: number) => normalDisasters(pm.knobs, t) ? null : rate;
   /** 自己起的瘟疫死几成再乘推演插件交的 plague.loss */
   const lossIn = sim.influence?.get('plague.loss') ? sim.influence : null;
   const withLoss = (x: number, r: number): number => (lossIn ? Math.round(Math.min(PLAGUE_LOSS_CAP, x * lossIn.get('plague.loss')![r]) * 1000) / 1000 : x);
@@ -283,7 +285,7 @@ function hook(sim: CivSim, pl: PlagueModel, calamity: Calamity | undefined): voi
         continue;
       }
       const loss =
-        fixed ?? (ob.level ? ivLossOf(base, ob.k, reg.seat[r], ob.level) : withLoss(lossOf(K, base, ob.k, reg.seat[r], ob.great, populationAt(s, t), !!pm.port[r], rate), r));
+        fixed ?? (ob.level ? ivLossOf(base, ob.k, reg.seat[r], ob.level) : withLoss(lossOf(K, base, ob.k, reg.seat[r], ob.great, populationAt(s, t), !!pm.port[r], rateAt(t)), r));
       (s.sacks ??= []).push({ year: t, loss, cause: 'plague' });
       const p = owner[r];
       if (p < 0) continue;
@@ -321,6 +323,7 @@ function hook(sim: CivSim, pl: PlagueModel, calamity: Calamity | undefined): voi
     if (t - pl.last < GREAT_YEARS + 2) return;
     // 全球大疫的凋敝里不自己起疫
     if (pl.quiet?.(t)) return;
+    const rate = rateAt(t);
     // 各城各掷各的:随机数 < 分量 ÷ ORIGIN_NORM 算掷中;掷中的里挑 随机数 ÷ 分量 最小的
     let r0 = -1;
     let best = Infinity;

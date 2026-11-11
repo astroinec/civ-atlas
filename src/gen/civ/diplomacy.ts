@@ -54,6 +54,7 @@ import { MARRIAGES_KNOBS } from './marriages';
 import { polityBorders, warModelOf, type War, type WarModel } from './wars';
 import { capitalAt, polityAlive, populationAt } from './growth';
 import { politicsModelOf } from './politics';
+import { RISE_KNOBS } from './riseRules';
 import type { CivModule } from './modules';
 import { Ev } from './events';
 import { civApi, type DiplomacyApi } from './api';
@@ -158,6 +159,7 @@ const U_JOIN = 7;
 const U_RESCUE = 8;
 const U_PUNISH = 9;
 const U_SUE = 10;
+const U_DECLARE_SUBMIT = 11;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -305,7 +307,16 @@ export function diplomacyModelOf(sim: CivSim): DiplomacyModel | undefined {
 function checkTime(dm: DiplomacyModel, p: number, k: number): number {
   const { DIP_FIRST, DIP_EVERY } = dm.k;
   const P = dm.pm.polities[p];
-  return P.founded + DIP_FIRST + DIP_EVERY * (k + 0.2 + 0.6 * keyed(dm.base, dm.pm.ptag[p], k, U_CHECK_T));
+  // 新立国规则(riseRules.ts):这一年起新立的国家,头一次看邦交提前
+  const rk = dm.pm.knobs.get(RISE_KNOBS);
+  if (P.founded >= rk.FROM) {
+    // 头一次:立国满 DIP_FIRST 年再加不到 1 年的随机;之后照原来的间隔(从头一次往后算)
+    const u = keyed(dm.base, dm.pm.ptag[p], k, U_CHECK_T);
+    const t0 = P.founded + Math.min(DIP_FIRST, rk.DIP_FIRST);
+    return k === 0 ? t0 + u : t0 + 1 + DIP_EVERY * (k - 1 + 0.2 + 0.6 * u);
+  }
+  const first = DIP_FIRST;
+  return P.founded + first + DIP_EVERY * (k + 0.2 + 0.6 * keyed(dm.base, dm.pm.ptag[p], k, U_CHECK_T));
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +347,12 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     dm.apply({ year: sim.now, kind, a: f.a ?? -1, b: f.b ?? -1, region: -1, settlement: -1, war: f.war ?? -1, ...(f.foe !== undefined ? { foe: f.foe } : {}) });
   };
   api.diplomacy.note = record;
+  // 分藩(新立国规则):分出去的 v 仍向原国 L 称臣(原国不是别国的藩属;politics.ts 调)
+  api.diplomacy.vassalize = (v: number, L: number, t: number) => {
+    if (!alive(v) || !alive(L) || dm.liegeOf(L) >= 0 || dm.liegeOf(v) >= 0) return false;
+    swear(v, L, t);
+    return true;
+  };
 
   // ---- 小工具 ----
   const alive = (p: number) => p >= 0 && pm.polities[p].ended === undefined;
@@ -565,6 +582,25 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
 
   /** x 向 y 宣战(不是援盟)之后:y 的盟国援盟 / 坐视不救,y 的宗主发兵来救 */
   api.war.onDeclare = (w: War, x: number, y: number, t: number) => {
+    // 新立国规则(riseRules.ts):被强得多的邻国宣战,小国可以当场遣使称臣、攻方受降罢兵
+    // 肯不肯看守方在位君主(好战越低越肯,rulers.ts)、同族异族、离攻方国都远近(远的攻方更肯受降);有分量的盟国撑腰就不降
+    const rk = pm.knobs.get(RISE_KNOBS);
+    if (t >= rk.FROM && dm.liegeOf(y) < 0 && dm.liegeOf(x) < 0 && !dm.vassalsOf(y).length && pm.size[y] <= SUBMIT_MAX && !api.war.revolt?.(w) && !halted(x, t)) {
+      powMemo.clear();
+      const px = powerOf(x, t), py = powerOf(y, t);
+      const backed = dm.alliesOf(y).some((z) => powerOf(z, t) >= 0.5 * px);
+      const d = dm.defected.get(y);
+      const recent = !!d && d.liege === x && t - d.year < RESUBMIT_REST;
+      if (!backed && !recent && py > 0 && px >= rk.DECLARE_RATIO * py) {
+        let p = rk.DECLARE_SUBMIT * effOf(pm, y, t).sue * (pm.polities[y].culture === pm.polities[x].culture ? SUE_KIN : SUE_FOREIGN);
+        if (pm.capDist[x][capRegion(y, t)] > SUE_FAR) p *= 1.4;
+        if (keyed4(dm.base, pm.ptag[y], pm.ptag[x], Math.round(t * 256), U_DECLARE_SUBMIT) < Math.min(0.85, p)) {
+          api.war.makePeace!(w, t);
+          if (alive(y)) swear(y, x, t, w.id);
+          return;
+        }
+      }
+    }
     for (const z of dm.alliesOf(y)) {
       // 国家方针(policy.ts):z 把攻方当亲国的不出兵(盟约不断);把守方当亲国的更肯出兵,当仇国的不救(盟约就此断了)
       if (z === x || !alive(z) || friendly(z, x, t) || befriends(pm, z, x, t) || fighting(z, x) || halted(z, t) || busy(z) || !borders(z, x)) continue;

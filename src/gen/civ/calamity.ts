@@ -4,6 +4,13 @@
 import { biomeTagged } from '../biomes';
 import { AdjKind, type Regions } from './types';
 import { keyed, subSeed } from './engine/rand';
+import { defineKnobs, type KnobSet } from './engine/knobs';
+
+/** 从指定年份恢复正常额外天灾，之前的历史保持原规则。 */
+export const CALAMITY_KNOBS = defineKnobs('calamity', { NORMAL_FROM: 65535 });
+export function normalDisasters(knobs: KnobSet, year: number): boolean {
+  return year >= knobs.get(CALAMITY_KNOBS).NORMAL_FROM;
+}
 
 /** 作者下的瘟疫(干预"天灾"):第几场 = PLAGUE_IV + 干预下标(和自己起疫的编号错开,plague.ts) */
 export const PLAGUE_IV = 1_000_000;

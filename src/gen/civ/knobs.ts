@@ -6,6 +6,8 @@
 import { OFFICIAL_KNOBS, knobSetOf, knobValueOk, type KnobPatch, type KnobSet, type Knobs, type KnobValue } from './engine/knobs';
 import { ASSIMILATION_KNOBS } from './assimilation';
 import { CITIES_KNOBS } from './cities';
+import { CALAMITY_KNOBS } from './calamity';
+import { RISE_KNOBS } from './riseRules';
 import { CONSORTS_KNOBS } from './consorts';
 import { CONTROL_KNOBS } from './control';
 import { COUNCIL_KNOBS } from './council';
@@ -39,6 +41,8 @@ import { WOMEN_KNOBS } from './women';
 export const CIV_KNOBS: readonly Knobs<Record<string, KnobValue>>[] = [
   ASSIMILATION_KNOBS,
   CITIES_KNOBS,
+  CALAMITY_KNOBS,
+  RISE_KNOBS,
   CONSORTS_KNOBS,
   CONTROL_KNOBS,
   COUNCIL_KNOBS,

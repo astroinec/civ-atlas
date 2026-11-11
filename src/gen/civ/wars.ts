@@ -92,6 +92,7 @@ import { bookChain, LOOK_K, quantize, type CivSim } from './engine/sim';
 import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, powerScaleOf, regentOf, rulerOf, type PolityModel } from './polities';
 import { reignBorn } from './rulers';
 import { REGENTS_KNOBS } from './regents';
+import { RISE_KNOBS } from './riseRules';
 import { POLICY_KNOBS } from './policy';
 import { capitalAt, populationAt } from './growth';
 import { regionPasses } from './passes';
@@ -436,6 +437,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
   const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
+  const riseK = pm.knobs.get(RISE_KNOBS);
   const api = civApi(sim);
   models.set(sim, wm);
   const T = pm.terrain;
@@ -619,7 +621,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     let yielded = 0;
     if (extra > 0 && pm.polities[w.a].ended === undefined && pm.polities[w.b].ended === undefined) {
       const capR = pm.settlements[capitalAt(pm.polities[w.b], t)].region;
-      for (let j = 0; j < extra && pm.size[w.b] > MIN_STATE + 1; j++) {
+      for (let j = 0; j < extra && pm.size[w.b] > (t >= riseK.FROM ? riseK.MIN_STATE : MIN_STATE) + 1; j++) {
         const [r] = pickTarget(w, CEDE_I + j, w.a, w.b, t, false);
         if (r < 0 || r === capR) break;
         take(w, w.a, w.b, r, t);
@@ -715,12 +717,13 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     }
     // 阶段 4 干预:手里有永久划给它的州的,不被并掉残部(迁都到剩下的城,那一块里没城就到别的块里挑)
     const keep = !!wm.iv?.holdsLock(y, t);
-    if (left < MIN_STATE && settled && !keep) return annex(w, x, y, r, t);
+    const rk = t >= riseK.FROM;
+    if (left < (rk ? riseK.MIN_STATE : MIN_STATE) && settled && !keep) return annex(w, x, y, r, t);
     // 破都纳降:攻方国力是守方 SURRENDER_POWER 倍以上、守方余下的州不超过攻方的 SURRENDER_SHARE,余下的国土一并归降,亡国
     // (讨伐民变、宗室争位的内战不算;阶段 4 干预不许灭的国家不降)
     if (!keep && left <= SURRENDER_SHARE * pm.size[x] && !api.war.revolt?.(w) && !wm.iv?.protects(y, t)) {
       const pw = powers(t, [x, y]);
-      if (pw[x] >= SURRENDER_POWER * pw[y]) return annex(w, x, y, r, t, true);
+      if (pw[x] >= (rk ? Math.max(SURRENDER_POWER, riseK.CRUSH) : SURRENDER_POWER) * pw[y]) return annex(w, x, y, r, t, true);
     }
     const sid = bestCapital(pm, owner, y, t, keep);
     if (sid >= 0) {
@@ -847,6 +850,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (Q.ended !== undefined || t - (wm.truce.get(pairKey(p, q)) ?? -Infinity) < TRUCE) continue;
       // 分裂 / 复国出来的国家有 NEWBORN 年的站稳期:不会一出生就被吞掉
       if (Q.parent !== undefined && t - Q.founded < NEWBORN) continue;
+      // 新立国规则(riseRules.ts):这一年起新立的国家头几年也不会被吞掉(受大国影响而立的小国也算)
+      if (Q.parent === undefined && Q.founded >= riseK.FROM && t - Q.founded < riseK.GRACE) continue;
       const qw = warsOf(q);
       if (qw.length >= MAX_WARS || qw.some((v) => v.a === p || v.b === p)) continue;
       // 阶段 4 干预:不打盟国;不许灭的国家只剩几州时没什么可打的
@@ -855,7 +860,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       // 照大纲顺着引时多看的一眼:只看方针里的仇国(引的就是"打它")
       if (k >= LOOK_K && k < REVENGE_K && pol?.foes?.length && !picks(pm, pol.foes, q)) continue;
       // 连续吞并多看的那一眼:只挑弱得多的邻国(国力不到本国的 1 / CRUSH,打起来就是灭国之战)
-      if (k >= CHAIN_K && pow[p] < CRUSH * pow[q]) continue;
+      if (k >= CHAIN_K && pow[p] < (t >= riseK.FROM ? riseK.CRUSH : CRUSH) * pow[q]) continue;
       // 邦交:不打宗主、藩属、同一个宗主的藩属;盟国只在结盟够久、共御的强邻已不足为患时才可能背盟去打
       let betray = false;
       if (dm) {
@@ -876,7 +881,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (Q.culture !== P.culture) o *= FOREIGN;
       o *= 1 + REVANCHE * Math.min(4, claims(q));
       // 小国(一场仗就能吞下)格外招人
-      if (pm.size[q] <= PREY) o *= PREY_ODDS;
+      // 新立国规则:只有攻方比它强得多时才算(小国之间不互相当猎物)
+      if (pm.size[q] <= PREY && (t < riseK.FROM || pow[p] >= riseK.PREY_GAP * pow[q])) o *= PREY_ODDS;
       if (betray) o *= dm!.betrayOdds * (api.war.kinBetray?.(p, q, t) ?? 1);
       if (oath > 0) o *= oath;
       // 联姻(marriage.ts):两国结着亲少开战,在位的君主不打舅家
@@ -1137,7 +1143,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       let held = 0;
       for (const e of w.takes) if (e.by === w.a && owner[e.region] === w.a) held++;
       // 灭国之战:拿下国都、对方丢了过半国土都不停(不设目标,见 CRUSH_GOAL;君主的倾向只管打多久,算在上面的年限里)
-      if (pow[w.a] >= CRUSH * pow[w.b]) peace = held >= CRUSH_GOAL * goalOf(wm, w);
+      if (pow[w.a] >= (t >= riseK.FROM ? riseK.CRUSH : CRUSH) * pow[w.b]) peace = held >= CRUSH_GOAL * goalOf(wm, w);
       else peace = capitalFell || held >= pm.size[w.b] || held >= Math.max(1, goalOf(wm, w) + eff.goal);
     }
     if (peace) {

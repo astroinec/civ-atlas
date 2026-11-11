@@ -69,7 +69,7 @@ import { warModelOf, type War, type WarModel } from './wars';
 import { politicsModelOf, type PoliticsModel } from './politics';
 import { devModelOf } from './development';
 import { GROWTH_A, capitalAt, populationAt } from './growth';
-import { calamityRates, type Calamity } from './calamity';
+import { calamityRates, normalDisasters, type Calamity } from './calamity';
 import type { UnrestRuleConsts } from './stateTables';
 import { claimants, murderedAt } from './royals';
 import { anySlump, inSlump, pandemicModelOf } from './pandemicState';
@@ -411,7 +411,10 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     // 灾年的中心:有城、有人住的州各自掷(按州的治所取随机数,改了别处的地形这里照旧);干旱、寒冷的地方更容易;
     // 「天灾」多 / 很多时几率 × CalamityRates.famine(平常照旧)
     const centres: number[] = [];
-    const more = calamityRates(calamity)?.famine;
+    const normal = normalDisasters(pm.knobs, t);
+    const more = normal ? undefined : calamityRates(calamity)?.famine;
+    const pBase = normal ? UNREST_KNOBS.values.P_BASE : P_BASE;
+    const pFull = normal ? UNREST_KNOBS.values.P_FULL : P_FULL;
     for (let r = 0; r < R; r++) {
       if (springOf[r] !== h || pm.cityOf[r] < 0 || culture[r] < 0) continue;
       const odds = more ? (CLIMATE[reg.biome[r]] * more) / CLUSTER_PER : CLIMATE[reg.biome[r]] / CLUSTER_PER;
@@ -455,7 +458,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
         if (rest) continue;
         const full = 1 / (1 + GROWTH_A * fexp(-s.growth * (t - s.founded)));
         const f2 = full * full;
-        const odds = sev * (1 - HOP_FADE * hop[r]) * CLIMATE[reg.biome[r]] * (P_BASE + P_FULL * f2 * f2) * (soil ? 1 + SOIL_W * (1 - soil[r]) : 1);
+        const odds = sev * (1 - HOP_FADE * hop[r]) * CLIMATE[reg.biome[r]] * (pBase + pFull * f2 * f2) * (soil ? 1 + SOIL_W * (1 - soil[r]) : 1);
         const tag = reg.seat[r];
         if (keyed4(um.base, k, tag, c, U_HIT) >= odds) continue;
         const loss = LOSS[0] + (LOSS[1] - LOSS[0]) * Math.min(1, 0.5 * odds + 0.5 * keyed4(um.base, k, tag, c, U_LOSS));

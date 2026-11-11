@@ -36,7 +36,7 @@ import { CAP_COUNT, devModelOf } from './development';
 import { capitalAt, populationAt, settlementRank } from './growth';
 import { scheduleRebuild } from './cities';
 import { afflict } from './disaster';
-import { IV_LOSS, PANDEMIC_K, PLAGUE_IV, calamityRates, naturalPandemic, pandemicBase, quakeRing, type Calamity } from './calamity';
+import { IV_LOSS, PANDEMIC_K, PLAGUE_IV, calamityRates, normalDisasters, naturalPandemic, pandemicBase, quakeRing, type Calamity } from './calamity';
 import { anySlump, newPandemic, notePandemicHit, pandemicModelOf, setPandemicModel, type Pandemic, type PandemicModel } from './pandemicState';
 import type { CivModule } from './modules';
 import { Ev } from './events';
@@ -192,7 +192,7 @@ function hook(run: Runner): void {
   // ---- 自己发生的全球大疫 ----
   sim.on(Ev.PandemicCheck, (k, _b, t) => {
     sim.schedule(panTime(K, base, k + 1), Ev.PandemicCheck, k + 1, 0);
-    if (!rate || !run.calamity) return;
+    if (!rate || !run.calamity || normalDisasters(pm.knobs, t)) return;
     if (anySlump(state, t)) return;
     const last = state.list.length ? state.list[state.list.length - 1].t0 : -Infinity;
     if (t - last < PAN_GAP) return;
@@ -267,7 +267,7 @@ function hook(run: Runner): void {
   // ---- 自己发生的地震水旱 ----
   sim.on(Ev.QuakeCheck, (k, _b, t) => {
     sim.schedule(quakeTime(K, base, k + 1), Ev.QuakeCheck, k + 1, 0);
-    if (!rate) return;
+    if (!rate || normalDisasters(pm.knobs, t)) return;
     // 各国在国土里挑一处有城的州当震中(掷得最小的那州)
     const at = new Map<number, [number, number]>();
     for (let r = 0; r < R; r++) {
