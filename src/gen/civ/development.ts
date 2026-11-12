@@ -65,7 +65,8 @@ import { capitalAt, populationAt, ruralCapacity } from './growth';
 import { BookWriter } from './fiscalBook';
 import { keyed, subSeed } from './engine/rand';
 import { type CivSim } from './engine/sim';
-import { grantSail, polityModelOf, type PolityModel } from './polities';
+import { grantSail, polityModelOf, rulingLeanings, type PolityModel } from './polities';
+import { RISE_KNOBS } from './riseRules';
 import { POLICY_KNOBS, focusIndex, segAt, type PolicySeg } from './policy';
 import { cultureModelOf } from './cultures';
 import { TableEngine, type TableCard } from './engine/tables';
@@ -841,6 +842,16 @@ function tick(sim: CivSim, d: DevModel, y: Year): void {
       if (!mul || p >= P) continue;
       for (let c = 0; c < 4; c++) focus[p * 4 + c] = mul[c];
       focusMob[p] = mul[Cap.Mobilization];
+    }
+    // 发展倾向(规则项 split.devLeanFrom;riseRules.ts):这一步算的时候当朝说了算的人"发展"倾向每偏 50,四样能力"自己长"增减 DEV_LEAN。
+    // 没生效 = 不乘,和原来逐位一样;发展度按固定的整步算,取的是整步那一刻的在位者,和推演怎么分段无关
+    const riseK = pm.knobs.get(RISE_KNOBS);
+    if (y >= riseK.FROM6 && riseK.DEV_LEAN > 0) {
+      for (let p = 0; p < P; p++) {
+        if (pm.polities[p].ended !== undefined || !pm.size[p]) continue;
+        const k = Math.max(0, 1 + (riseK.DEV_LEAN * (rulingLeanings(pm, p, y).develop - 50)) / 50);
+        if (k !== 1) for (let c = 0; c < 4; c++) focus[p * 4 + c] *= k;
+      }
     }
   }
   // 推一把发展(boost.ts):这一步里各州"自己长""向邻居学"的倍数,按这一步里管了几成折算。没推的州 1,什么都不变

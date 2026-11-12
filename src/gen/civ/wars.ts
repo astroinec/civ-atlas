@@ -515,6 +515,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     }
     if (culture[r] === X.culture) sx *= KIN_ATTACK;
     if (culture[r] === Y.culture) sy *= HOME_DEF;
+    // 农耕守势(规则项 split.farmDefFrom;riseRules.ts):农耕国、大河国在本族的州上守得更牢;没生效 = 不乘,和原来逐位一样
+    if (t >= riseK.FROM5 && culture[r] === Y.culture && (Y.kind === 'farm' || Y.kind === 'river')) sy *= riseK.FARM_DEF;
     if (pm.settlements[capitalAt(Y, t)].region === r) sy *= CAPITAL_DEF;
     if (wm.iv?.protects(y, t)) sy *= PROTECT_DEF; // 阶段 4 干预"不许灭":守得格外牢
     const a2 = sx * sx;

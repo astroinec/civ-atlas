@@ -519,21 +519,42 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     return true;
   };
 
+  const riseK = pm.knobs.get(RISE_KNOBS);
+  /** 自由结盟时"够得着"的国家:接壤的,加上国都离自己国都不超过 PACT_RANGE 的(不接壤也算;按编号排,不重复) */
+  const around = (p: number, t: number): number[] => {
+    const out = new Set<number>(neighbors(p));
+    const d = pm.capDist[p];
+    for (const Z of pm.polities) {
+      if (!Z || Z.id === p || Z.ended !== undefined) continue;
+      if (d[capRegion(Z.id, t)] <= riseK.PACT_RANGE) out.add(Z.id);
+    }
+    return [...out].sort((x, y) => x - y);
+  };
   const tryPact = (p: number, f: number, ratio: number, k: number, t: number): boolean => {
-    if (dm.alliesOf(p).length >= MAX_PACTS) return false;
+    // 自由结盟(规则项 split.pactFrom;riseRules.ts):没生效 = 下面每一步都和原来逐位一样
+    const free = t >= riseK.FROM4;
+    const maxPacts = free ? riseK.PACT_MAX : MAX_PACTS;
+    const rest = free ? riseK.PACT_REST : PACT_REST;
+    if (dm.alliesOf(p).length >= maxPacts) return false;
     const pf = powerOf(f, t);
     // 国家方针(policy.ts):不和仇国结盟,亲国先找(没有方针 = null)
     const pol = pm.policies.size ? policyAt(pm, p, t) : null;
     let best = -1;
     let bestScore = 0;
     let cowar = false;
-    for (const z of neighbors(f)) {
-      if (z === p || dm.liegeOf(z) >= 0 || friendly(z, f, t) || friendly(z, p, t) || fighting(z, p)) continue;
-      if (dm.alliesOf(z).length >= MAX_PACTS || t - (dm.broken.get(pairKey(p, z)) ?? -Infinity) < PACT_REST) continue;
+    // 候选:强邻的邻国;自由结盟时自己够得着的国家也算(先强邻的、后自己的,不重复)
+    let cands = neighbors(f);
+    if (free) {
+      cands = cands.slice();
+      for (const z of around(p, t)) if (!cands.includes(z)) cands.push(z);
+    }
+    for (const z of cands) {
+      if (z === p || z === f || dm.liegeOf(z) >= 0 || friendly(z, f, t) || friendly(z, p, t) || fighting(z, p)) continue;
+      if (dm.alliesOf(z).length >= maxPacts || t - (dm.broken.get(pairKey(p, z)) ?? -Infinity) < rest) continue;
       if (pm.policies.size && (picks(pm, pol?.foes, z) || hates(pm, z, p, t))) continue;
       const pz = powerOf(z, t);
       const war = fighting(z, f);
-      if (pz < PACT_MIN_POWER * pf || (!war && pf < PACT_FEAR * pz)) continue;
+      if (!free && (pz < PACT_MIN_POWER * pf || (!war && pf < PACT_FEAR * pz))) continue;
       let score = Math.min(1, pz / pf) * (war ? PACT_COWAR : 1) * (borders(p, z) ? 1.5 : 1);
       if (pol && picks(pm, pol.friends, z)) score *= FRIEND_PACT;
       // 结着亲的先找(marriage.ts)
@@ -545,11 +566,27 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       }
     }
     if (best < 0) return false;
-    const odds = PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT) * (cowar ? PACT_COWAR : 1);
+    // 自由结盟时不看对着的邻国比自己强多少:有合适的盟友就按固定的赔率结(riseK.PACT_FREE)
+    const odds = (free ? riseK.PACT_FREE : PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT)) * (cowar ? PACT_COWAR : 1);
     if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= odds / (1 + odds)) return false;
     const sid = capitalAt(pm.polities[p], t);
     record('alliance', { a: p, b: best, region: pm.settlements[sid].region, settlement: sid, foe: f });
     return true;
+  };
+
+  /** 自由结盟时没有够得上"强邻"的邻国:对着够得着的国家里最强的那个不友好的找盟友(一个都没有 = −1) */
+  const anyRival = (p: number, t: number, pp: number): [number, number] => {
+    let best = -1;
+    let bestRatio = 0;
+    for (const q of around(p, t)) {
+      if (friendly(p, q, t) || dm.liegeOf(q) >= 0 || halted(q, t)) continue;
+      const ratio = powerOf(q, t) / pp;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        best = q;
+      }
+    }
+    return [best, bestRatio];
   };
 
   sim.on(Ev.DiplomacyCheck, (k, p, t) => {
@@ -569,6 +606,11 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const pp = powerOf(p, t);
     const [f, ratio] = mainThreat(p, t, pp);
     if (f >= 0 && (trySubmit(p, f, ratio, k, t) || tryPact(p, f, ratio, k, t))) return;
+    // 自由结盟(riseRules.ts):没有强邻也可以找盟友
+    if (f < 0 && t >= riseK.FROM4) {
+      const [g, gr] = anyRival(p, t, pp);
+      if (g >= 0 && tryPact(p, g, gr, k, t)) return;
+    }
     // 立约(treaties.ts)
     api.diplomacy.onCheck?.(p, k, t, f);
   });
