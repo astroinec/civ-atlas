@@ -79,7 +79,7 @@
  * | `appoint` | 任将 / 任臣 | a = 国家,char = 作者人物的编号,role = general 将领 / minister 名臣,born = 他的生年 | 这一年年初起他是这国的将领 / 名臣,**只改人物和编年史,不改历史**(将领带了能力 skill 的除外:他挂帅的仗改历史,见表下):将领 = 本国的仗由他挂帅(推演原来派的那位照旧随军,写成副将),名臣 = 朝中的事他也经手(推演里的名臣照旧)。这国那年已亡、他还没出生、已去世、不满 16 岁、那时他正是某国在位的君主 = 不生效。见表下 | died:他的卒年(人物卡上写了才有);until:这一年年初卸任(不含;不给 = 到卒年,卒年也没有 = 将领到 AUTHOR_GENERAL_AGE_END 岁卸甲、名臣到 AUTHOR_MINISTER_AGE_END 岁致仕);skill:将领的能力(不给 = 寻常,见表下) |
  * | `marry`   | 为他联姻 | a = 国家,person = 人物键(此刻在位的君主,或君主的儿子、兄弟叔伯),b = 对方国家 | 这一年年初两国结亲:他娶 b 在位君主的女儿(那位君主要年过 30);两国 40 年里少开战、易结盟(和推演里结的亲一样)。两国有一国已亡、是共和国、正在交战、他不是宗室 = 不生效 | how:give = 本国宗室女嫁给 b 的太子(没有就挑年轻的君主、别的宗室)/ mutual = 互嫁 |
  * | `disaster`| 天灾     | type = plague 瘟疫(city = 从哪座城起)/ famine 饥荒(a = 一国,或 regions = 几州)/ quake 地震水旱(region = 哪一处,连同附近一圈州)/ pandemic 全球大疫(city = 从哪座城起);level = 1 轻 / 2 中 / 3 重 | 这一年年初受灾的城人口掉一截(城里约死一成半 / 三成 / 五成),几十年慢慢长回来,其间国内更动荡;瘟疫照瘟疫的规矩往外传(那年已在闹瘟疫 = 并进那一场)。全球大疫传遍各洲(城里死两成 / 三四成 / 五成),之后疫后无人收拾那些年人口接着掉、发展度和时代往回掉、村镇荒废(civ/pandemic.ts)。不改地形 | slump:全球大疫疫后无人收拾几年(10 / 30 / 60,不给 = 30) |
- * | `boost`   | 推一把发展 | a = 国家;mul = 快几倍(3 / 10;不给 = 直接进下一个时代) | 快几倍:从这一年起到 until(不含)那些州四样能力的"自己长"和"向邻居学"都 × mul(卡在时代门口时自己长不乘),到期照常长、长上去的不退;直接进:这一年年初以 a 的国都所在州为准进它的下一个时代,那些州四样能力都拉到那个时代开头(不看物产等门槛;国都已在最后一个时代 = 不生效)。a 那年已亡 = 不生效(civ/boost.ts) | until:快几倍管到哪一年(不给 = from + 50);regions = 只推这几州(最多 BOOST_REGIONS_MAX 州,换了主也照推;不给 = 整国,每一刻归 a 的州) |
+ * | `boost`   | 推一把发展 | a = 国家;mul = 快几倍(1.1 / 1.2 / 3 / 10;不给 = 直接进下一个时代) | 快几倍:从这一年起到 until(不含)那些州四样能力的"自己长"和"向邻居学"都 × mul(卡在时代门口时自己长不乘),到期照常长、长上去的不退;直接进:这一年年初以 a 的国都所在州为准进它的下一个时代,那些州四样能力都拉到那个时代开头(不看物产等门槛;国都已在最后一个时代 = 不生效)。a 那年已亡 = 不生效(civ/boost.ts) | until:快几倍管到哪一年(不给 = from + 50);regions = 只推这几州(最多 BOOST_REGIONS_MAX 州,换了主也照推;不给 = 整国,每一刻归 a 的州) |
  * | `trek`    | 大迁徙   | folk = 民族(`culture:…`);region = 从哪一州出发(可选);to = 往哪一州去(可选,不给 = 推演挑) | 这一年年初这一族分出一支(约三成的人,到了能占 3–8 州)举族远走,沿陆路(草原快,林地、山地慢,不过海)走到那一州,路上洗劫,到了立国、开战,和推演自己起的大迁徙一样(civ/migration.ts)。出发:给了 region、那年那州还是这一族的就从那州走,不然从本族离目的地最近的一州走。推演挑 = 走得到的、不是本族的、有城的州里"地好 × 守得弱"最高的那一州。不管全世界同时几支在路上、这个世界已经走过几次、这一族多久前走过。这一族那年已消亡 / 走不到(陆路不通、推演挑没有可去的地方)= 不生效 | reach:推演挑时走多远(near 近 / far 远;不给 = 中,见 TREK_REACHES);dir:推演挑时只挑这个方位上的地方(east 东 / south 南 / west 西 / north 北;按整条路线在地图上的走向,同 Civ.migrations 的 dir;那一档没有就依次放宽到中、近、远里别的几档。照大纲推演硬改「大迁徙」情节时下的) |
  * | `stay`    | 不许迁   | folk = 民族                       | 从这一年起推演不让这一族大迁徙(已经在路上的照走;避兵外迁、随征服而来的移民这类小股的照旧;作者下令的大迁徙照走) | until:到这一年止(不含;不给 = 一直) |
  *
@@ -769,7 +769,7 @@ export type TrekDir = (typeof TREK_DIRS)[number];
 export const TREK_DIR_NAMES: Record<TrekDir, MigrationDir> = { east: '东', south: '南', west: '西', north: '北' };
 
 /** 推一把发展快几倍的几档(干预 boost 的 mul;不给 = 直接进下一个时代) */
-export const BOOST_MULS = [3, 10] as const;
+export const BOOST_MULS = [1.1, 1.2, 3, 10] as const;
 export type BoostMul = (typeof BOOST_MULS)[number];
 /** 快几倍管多久的几档(年)、默认 */
 export const BOOST_YEARS = [20, 50, 100] as const;
@@ -1981,7 +1981,7 @@ export type SwayIssue = (typeof SWAY_ISSUES)[number];
 /** 传教、倡议、施压最长管多少年 */
 export const SWAY_YEARS_MAX = 60;
 /** 传教的倍数 */
-export const MISSION_MULS = [2, 3, 4] as const;
+export const MISSION_MULS = [1.2, 2, 3, 4] as const;
 
 /** 人物键的几段(格式见 personKey):国家键、身份、生成时的名字、生年(取整)、同名同年的第几个(0 起);格式不对 = null */
 export interface PersonKeyParts {
