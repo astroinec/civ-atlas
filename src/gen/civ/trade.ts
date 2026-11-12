@@ -230,6 +230,32 @@ export function tradeRoutesOf(sim: CivSim): readonly TradeRoute[] | undefined {
   return models.get(sim)?.routes;
 }
 
+/** 商道一步多少年(钱粮算商路之利时按整步取,control.ts) */
+export const TRADE_STEP = STEP;
+
+/**
+ * at 这一年(含)为止还通着的商道:买方、产地州、那时走的路线(经过的州)。
+ * 只读年份不晚于 at 的通断和路线;at 取早于此刻的整步时,那一步已经算过,结果和推演停在哪、怎么分段推无关
+ */
+export function openRoutesAt(sim: CivSim, at: Year): { buyer: number; from: number; regions: readonly number[] }[] {
+  const out: { buyer: number; from: number; regions: readonly number[] }[] = [];
+  for (const r of models.get(sim)?.routes ?? []) {
+    let on = false;
+    for (const e of r.events) {
+      if (e.year > at) break;
+      on = e.kind === 'open' || e.kind === 'reopen';
+    }
+    if (!on) continue;
+    let regions: readonly number[] = [];
+    for (const p of r.paths) {
+      if (p.year > at) break;
+      regions = p.regions;
+    }
+    out.push({ buyer: r.buyer, from: r.from, regions });
+  }
+  return out;
+}
+
 function push(L: Live, e: TradeEvent): void {
   L.r.events.push(e);
 }

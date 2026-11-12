@@ -188,7 +188,7 @@ export function FiscalPage({ civ, id, year }: { civ: Civ; id: number; year: numb
             <Line k="工商" note="城里" n={v.craft} bar={v.craft / owed} />
             <Line k="市税" note="商路港口" n={v.trade} bar={v.trade / owed} />
             <Line k="各地截留" note={`交上来${chengText(v.got / owed)}`} n={v.kept} minus />
-            {wan(v.tribIn) > 0 && <Line k="收贡" note="藩属交来" n={v.tribIn} />}
+            {wan(v.tribIn) > 0 && <Line k="收贡" note="藩属交来、商路之利" n={v.tribIn} />}
           </div>
         </section>
         <section className="cp-sec">

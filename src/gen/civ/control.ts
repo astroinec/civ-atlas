@@ -50,7 +50,8 @@
 import { Layer, AdjKind, type Civ, type Polity, type TablesState, type Year } from './types';
 import { fexp, keyed, keyed4, subSeed } from './engine/rand';
 import { type CivSim } from './engine/sim';
-import { polityModelOf, powerScaleOf, unrestShiftOf, type PolityModel } from './polities';
+import { polityModelOf, powerScaleOf, rulingLeanings, unrestShiftOf, type PolityModel } from './polities';
+import { TRADE_STEP, openRoutesAt } from './trade';
 import { POLICY_KNOBS } from './policy';
 import { warModelOf, type War, type WarModel } from './wars';
 import { politicsModelOf, type PoliticsModel } from './politics';
@@ -397,6 +398,41 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
   const pop = popLayer(sim, pm, dev, eng, saved === null ? null : saved && saved.last > -Infinity ? saved.last : Math.floor(sim.now));
   let capR = new Int32Array(0);
   let capCap = new Float64Array(0);
+  // ---- 商路之利(新立国规则第三批;riseRules.ts):通着的商道给买方、产地所属的国、过境的国添进项 ----
+  const tradeK = pm.knobs.get(RISE_KNOBS);
+  /** 上一个整步时通着的商道(整步换了才重取) */
+  let tradeRef = -Infinity;
+  let tradeOpen: ReturnType<typeof openRoutesAt> = [];
+  const tradeGain = (t: number, NP: number, got: Float64Array): void => {
+    const ref = Math.floor((t - 1) / TRADE_STEP) * TRADE_STEP;
+    if (ref !== tradeRef) {
+      tradeOpen = openRoutesAt(sim, ref);
+      tradeRef = ref;
+    }
+    if (!tradeOpen.length) return;
+    const due = eng.get('应缴');
+    const share = new Float64Array(NP);
+    const seen = new Set<number>();
+    for (const o of tradeOpen) {
+      const b = o.buyer;
+      if (b < 0 || b >= NP || !(pm.size[b] > 0)) continue;
+      const s = o.from < owner.length ? owner[o.from] : -1;
+      share[b] += 1;
+      if (s >= 0 && s < NP && s !== b) share[s] += 1;
+      seen.clear();
+      for (const r of o.regions) {
+        const p = r < owner.length ? owner[r] : -1;
+        if (p < 0 || p >= NP || p === b || p === s || seen.has(p)) continue;
+        seen.add(p);
+        share[p] += tradeK.TRADE_PASS;
+      }
+    }
+    for (let p = 0; p < Math.min(NP, due.length); p++) {
+      if (!(share[p] > 0) || !(pm.size[p] > 0) || !(due[p] > 0)) continue;
+      const lean = 1 + (tradeK.TRADE_LEAN * (rulingLeanings(pm, p, t).trade - 50)) / 50;
+      got[p] += Math.min(tradeK.TRADE_CAP, tradeK.TRADE_PER * share[p] * Math.max(0, lean)) * due[p];
+    }
+  };
   /** 填输入表:此刻各州的归属、离国都的路程、异族、刚被征服、大城;各国国都所在州的行政能力、危机、当朝几年、近年的饥荒疫病、民变、割据 */
   const fill = (t: number): void => {
     const NP = pm.polities.length;
@@ -462,6 +498,8 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
         got[l] += x;
       }
     }
+    // 商路之利(规则项 split.tradeFrom;riseRules.ts):没生效 = 不加,和原来逐位一样
+    if (started && t >= tradeK.FROM3 && tradeK.TRADE_PER > 0) tradeGain(t, NP, got);
     // 各州城的人口每年填(国力要);三样收入要的能力、港口大河几年填一次(只在那几张表要算的年份填,接着推时也一样;乡村人口读表)
     cityPopulationsAt(dev, t, owner, eng.input('城民'));
     // 议事定下的征收之法、分封(council.ts;没挂 = 都是 0)
