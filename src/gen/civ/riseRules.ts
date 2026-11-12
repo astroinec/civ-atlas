@@ -86,4 +86,40 @@ export const RISE_KNOBS = defineKnobs('rise', {
   FROM6: 65535,
   /** 发展倾向(development.ts):当朝说了算的人"发展"倾向每偏 50,本国各州四样能力"自己长"增减这么多 */
   DEV_LEAN: 0.1,
+  /**
+   * 第七批(疆土与封建)从这一年起生效(规则项 split.realmFrom);65535 = 不用:
+   *   ① 新国不急着称臣(diplomacy.ts):立国不满 SUBMIT_GRACE 年的国家不主动遣使称臣、被宣战也不当场称臣(战败称臣照旧;分藩、分封的不算)
+   *   ② 分封(politics.ts):国土至少 FEUD_MIN 州、超出国都能稳管的州数(OVER_BASE + OVER_PER × 行政能力)、没在打仗的大国,
+   *      每次看内政有 FEUD_P × 2 × 超出的倍数(最多 1)的机会,把离国都最远的 FEUD_GROUP_MIN–FEUD_GROUP_MAX 州(不超过国土 FEUD_FRAC;
+   *      在打仗时不封挨着敌国的州)分封出去立国,受封的国家向它称臣;分封以后 FEUD_REST 年内不再分封;
+   *      超出能稳管州数的大国宣战赔率 × (能稳管 ÷ 州数)^OVER_WAR_EXP,新立的国家挨打 × YOUNG_PREY
+   *   ③ 无主大城立国更容易,还能合众(politics.ts):大城自立的门槛换成 BIG7_*;立国时把挨着的、同族、有城(人口过 FED_POP)的无主州一并带上,最多 FED_MAX 州
+   *   ④ 州自身的地形(wars.ts):守方按那州的平均海拔、地貌再乘 TERRAIN_*;游牧国攻打山地、林地、湿地 × NOMAD_ROUGH,攻打草原、荒漠 × NOMAD_OPEN
+   */
+  FROM7: 65535,
+  SUBMIT_GRACE: 40,
+  /** 立国不满 SUBMIT_GRACE 年的国家挨打的赔率倍数;超出能稳管州数的大国宣战赔率 × (能稳管 ÷ 州数)^OVER_WAR_EXP */
+  YOUNG_PREY: 0.5,
+  OVER_WAR_EXP: 2,
+  FEUD_MIN: 14,
+  FEUD_P: 0.6,
+  FEUD_GROUP_MIN: 2,
+  FEUD_GROUP_MAX: 4,
+  FEUD_FRAC: 0.2,
+  FEUD_REST: 60,
+  BIG7_CAP: 30,
+  BIG7_POP: 10,
+  BIG7_AGE: 150,
+  BIG7_P: 0.5,
+  BIG7_MAX: 6,
+  FED_POP: 8,
+  FED_MAX: 3,
+  /** 海拔(米)≥ 这几档时守方的倍数 */
+  TERRAIN_ELEV: [600, 1000, 1600],
+  TERRAIN_ELEV_DEF: [1.1, 1.2, 1.35],
+  /** 湿地、雨林守方的倍数;荒漠守方的倍数(攻方粮道难继);游牧国的山林 = 海拔 ≥ TERRAIN_ELEV[1]、雨林、湿地、针叶林,开阔地 = 草原、稀树草原、荒漠 */
+  TERRAIN_WET_DEF: 1.15,
+  TERRAIN_DRY_DEF: 1.1,
+  NOMAD_ROUGH: 0.85,
+  NOMAD_OPEN: 1.1,
 });

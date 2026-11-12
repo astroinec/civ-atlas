@@ -211,6 +211,7 @@ const U_TRIBAL_T = 8;
 const U_EDGE = 9;
 const U_BIG = 10;
 const U_VASSAL = 11;
+const U_FEUD = 12;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -717,10 +718,63 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     if (canSplit(P, t)) trySplit(P, k, t, regionsOf(p));
   };
 
+  // ---- 分封(疆土与封建,riseRules.ts 第七批):管不过来的大国把最远的几州封出去,受封的国家称臣 ----
+  const tryEnfeoff = (P: Polity, k: number, t: number): boolean => {
+    const rk = pm.knobs.get(RISE_KNOBS);
+    if (t < rk.FROM7) return false;
+    const pid = P.id;
+    const N = pm.size[pid];
+    if (N < rk.FEUD_MIN || wm.iv?.unites(pid, t)) return false;
+    if (t - (pol.lastSplit.get(pid) ?? -Infinity) < rk.FEUD_REST) return false;
+    if (api.diplomacy.liegeOf && api.diplomacy.liegeOf(pid) >= 0) return false;
+    // 在打仗时也能分封,只是不封挨着敌国的州
+    const foes = new Set<number>();
+    for (const x of wm.wars) if (x.end === undefined && (x.a === pid || x.b === pid)) foes.add(x.a === pid ? x.b : x.a);
+    const front = (r: number) => { for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1]; q++) if (foes.has(owner[reg.adj[q]])) return true; return false; };
+    const gov = api.politics.governable?.(pid, t) ?? Infinity;
+    if (!(N > gov)) return false;
+    const odds = rk.FEUD_P * Math.min(1, 2 * (N / gov - 1));
+    if (keyed(pol.base, pm.ptag[pid], k, U_FEUD) >= odds) return false;
+    const dist = pm.capDist[pid];
+    const capR = capRegion(pid, t);
+    const mine = regionsOf(pid).filter((r) => r !== capR && settled(r, t) && !wm.iv?.locked(r, t) && !front(r));
+    if (!mine.length) return false;
+    mine.sort((a, b) => (dist[b] ?? 0) - (dist[a] ?? 0) || a - b);
+    const maxG = Math.min(rk.FEUD_GROUP_MAX, Math.floor(N * rk.FEUD_FRAC));
+    if (maxG < rk.FEUD_GROUP_MIN) return false;
+    const ok = new Set(mine);
+    // 从最远、有城的那州起,往外并挨着的、也离国都远的州(只走陆路)
+    const r0 = mine.find((r) => pm.cityOf[r] >= 0);
+    if (r0 === undefined) return false;
+    const group = [r0];
+    const inGroup = new Set(group);
+    while (group.length < maxG) {
+      let best = -1;
+      for (const r of group)
+        for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1]; q++) {
+          const j = reg.adj[q];
+          if (reg.adjKind[q] === AdjKind.SeaRoute || inGroup.has(j) || !ok.has(j)) continue;
+          if (best < 0 || (dist[j] ?? 0) > (dist[best] ?? 0) || ((dist[j] ?? 0) === (dist[best] ?? 0) && j < best)) best = j;
+        }
+      if (best < 0) break;
+      group.push(best);
+      inGroup.add(best);
+    }
+    if (group.length < rk.FEUD_GROUP_MIN) return false;
+    const cut = api.politics.cutOff?.(pid, group, t, maxG + 2);
+    if (!cut || cut.length >= N) return false;
+    const sid = biggestCity(cut, t);
+    if (sid < 0) return false;
+    const v = secede(pid, cut, sid, r0, t, {}, 'split', 'enfeoff');
+    api.diplomacy.vassalize?.(v.id, pid, t, 'enfeoff');
+    return true;
+  };
+
   sim.on(Ev.PoliticsCheck, (k, p, t) => {
     const P = pm.polities[p];
     if (!P || P.ended !== undefined) return;
     sim.schedule(checkTime(pol, p, k + 1), Ev.PoliticsCheck, k + 1, p);
+    if (tryEnfeoff(P, k, t)) return;
     const split = canSplit(P, t);
     const merge = canMerge(P, t);
     const move = canMove(P, k, t);
@@ -881,13 +935,28 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
         return caps;
       };
       // 大城自立(新立国规则):够大、够老的城,国都间距放宽成 BIG_SPACING 倍,不必挨着大国,有机会自己立国
-      if (rise && (rush || bigDone < BIG_MAX) && capacityAt(s, t) >= BIG_CAP && populationAt(s, t) >= BIG_POP && t - s.founded >= BIG_AGE
-        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < BIG_P) && !nearCapital(r, BIG_SPACING * pm.spacing, capsNow())) {
+      // 疆土与封建(riseRules.ts 第七批):门槛换成 BIG7_*,立国时带上挨着的同族有城的无主州(合众)
+      const r7 = rise && t >= rk.FROM7;
+      const [bCap, bPop, bAge, bP, bMax] = r7 ? [rk.BIG7_CAP, rk.BIG7_POP, rk.BIG7_AGE, rk.BIG7_P, rk.BIG7_MAX] : [BIG_CAP, BIG_POP, BIG_AGE, BIG_P, BIG_MAX];
+      if (rise && (rush || bigDone < bMax) && capacityAt(s, t) >= bCap && populationAt(s, t) >= bPop && t - s.founded >= bAge
+        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < bP) && !nearCapital(r, BIG_SPACING * pm.spacing, capsNow())) {
         const bm = mentorOf(r, t);
         const bnomad = pm.cultures[culture[r]].kind === 'nomad' || (bm >= 0 && pm.polities[bm].lineage === 'khanate');
         const p = addPolity(pm, s.id, culture[r], t, bm >= 0 ? (bnomad ? { mentor: bm } : { mentor: bm, lineage: pm.polities[bm].lineage }) : {});
         sim.setOwner(Layer.Polity, r, p.id, Ev.PolityFound);
-        sim.record('found', bm >= 0 ? { a: p.id, b: bm, region: r, settlement: s.id } : { a: p.id, region: r, settlement: s.id });
+        const fed: number[] = [];
+        if (r7) {
+          for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1] && fed.length < rk.FED_MAX; q++) {
+            if (reg.adjKind[q] === AdjKind.SeaRoute) continue;
+            const j = reg.adj[q];
+            const c = pm.cityOf[j];
+            if (owner[j] >= 0 || culture[j] !== culture[r] || c < 0 || pm.settlements[c].ended !== undefined || populationAt(pm.settlements[c], t) < rk.FED_POP || api.polity.closed?.(j, -1, t)) continue;
+            fed.push(j);
+          }
+          for (const j of fed) sim.setOwner(Layer.Polity, j, p.id, Ev.PolityFound);
+        }
+        const base0 = bm >= 0 ? { a: p.id, b: bm, region: r, settlement: s.id } : { a: p.id, region: r, settlement: s.id };
+        sim.record('found', fed.length ? { ...base0, cause: 'league', n: fed.length } : base0);
         capsNow()[r] = 1;
         bigDone++;
         continue;

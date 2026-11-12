@@ -1926,6 +1926,8 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       // 边缘立国:受邻近强国影响提早立的国("受大昌影响,李昭建平国")
       const mentor = e.b >= 0 && polityOf(civ, e.a)?.mentor === e.b ? e.b : -1;
       if (mentor >= 0) head = `受${pn(civ, mentor, y)}影响,${head}`;
+      // 合众立国(疆土与封建,politics.ts):无主大城带上邻近同族的几城一起立国
+      if (e.cause === 'league' && (e.n ?? 0) > 0) head = `${where}等${cnNumber((e.n ?? 0) + 1)}城合众立国,号${pn(civ, e.a, y)}`;
       return withPeople(base(e, id, `${head}${where ? `,都于${where}` : ''}`, imp, mentor >= 0 ? [e.a, mentor] : [e.a], [e.region]), who?.rise === 'found' ? who : null);
     }
     case 'rank':
@@ -1983,6 +1985,9 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
         const back = host >= 0 && host !== e.b ? `自${pn(civ, host, y)}还,` : '';
         const head = `故${(fallen.name && polityRootAt(fallen, fallen.ended ?? y)) || '国'}${folk}${back}${r ? `据${r}` : ''}`;
         t = e.b >= 0 ? `${head}起兵,脱${pn(civ, e.b, y)}复国,号${A}` : `${head}复国,号${A}`;
+      } else if (e.cause === 'enfeoff') {
+        // 分封(疆土与封建,politics.ts):"大渭疆土广远,难以尽治,以瑞州等地分封李昭,号瑞国"
+        t = `${pn(civ, e.b, y)}疆土广远,难以尽治,以${r ? `${r}等地` : '边地'}分封${who ? who.name : '宗室'},号${A}`;
       } else {
         // "瑞州守将李昭叛大渭自立,号瑞国";割据多年以后自立的(control.ts):"割据瑞州的守将李昭叛大渭自立"
         const title = P?.eastern ? '守将' : '领主';
@@ -2464,7 +2469,7 @@ function diplomacyEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       return base(e, id, t, 1, [e.a, e.b], [], '绝');
     }
     case 'submit': {
-      const t = `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
+      const t = e.cause === 'enfeoff' ? `${A}受封于${B},世为藩屏,岁岁朝贡` : `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
       const P = polityOf(civ, e.a);
       return base(e, id, t, P && polityTierAt(P, y) >= GREAT_TIER ? 3 : 2, [e.a, e.b], [e.region]);
     }

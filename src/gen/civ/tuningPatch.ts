@@ -76,6 +76,7 @@ const KNOBS: Readonly<Record<string, TuningKnobs>> = {
   'split.pactFrom': { knobs: ['rise.FROM4'] },
   'split.farmDefFrom': { knobs: ['rise.FROM5'] },
   'split.devLeanFrom': { knobs: ['rise.FROM6'] },
+  'split.realmFrom': { knobs: ['rise.FROM7'] },
   'split.age': { knobs: ['unrest.AGE_W'] },
   'diplo.pact': { knobs: ['diplomacy.PACT_ODDS'] },
   'diplo.submit': { knobs: ['diplomacy.SUBMIT_ODDS', 'diplomacy.SUE_OFFER'] },

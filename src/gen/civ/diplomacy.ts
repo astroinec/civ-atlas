@@ -348,9 +348,10 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   };
   api.diplomacy.note = record;
   // 分藩(新立国规则):分出去的 v 仍向原国 L 称臣(原国不是别国的藩属;politics.ts 调)
-  api.diplomacy.vassalize = (v: number, L: number, t: number) => {
+  api.diplomacy.liegeOf = (p: number) => dm.liegeOf(p);
+  api.diplomacy.vassalize = (v: number, L: number, t: number, cause?: 'enfeoff') => {
     if (!alive(v) || !alive(L) || dm.liegeOf(L) >= 0 || dm.liegeOf(v) >= 0) return false;
-    swear(v, L, t);
+    swear(v, L, t, -1, cause);
     return true;
   };
 
@@ -431,9 +432,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   };
 
   /** 一国称臣:记 submit;它结着的盟随之作废(各记一条 unally,cause = vassal) */
-  const swear = (v: number, L: number, t: number, war = -1) => {
+  const swear = (v: number, L: number, t: number, war = -1, cause?: 'enfeoff') => {
     const sid = capitalAt(pm.polities[v], t);
-    record('submit', { a: v, b: L, region: pm.settlements[sid].region, settlement: sid, war });
+    record('submit', { a: v, b: L, region: pm.settlements[sid].region, settlement: sid, war, ...(cause ? { cause } : {}) });
     for (const x of dm.pactsOf(v)) record('unally', { a: v, b: x.a === v ? x.b : x.a, cause: 'vassal' });
   };
 
@@ -506,6 +507,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
 
   const trySubmit = (p: number, q: number, ratio: number, k: number, t: number): boolean => {
     if (ratio < SUBMIT_RATIO || pm.size[p] > SUBMIT_MAX || fighting(p, q) || dm.vassalsOf(p).length || fightsBloc(p, q)) return false;
+    // 疆土与封建(riseRules.ts 第七批):立国不满 SUBMIT_GRACE 年的国家不主动称臣
+    const rk7 = pm.knobs.get(RISE_KNOBS);
+    if (t >= rk7.FROM7 && t - pm.polities[p].founded < rk7.SUBMIT_GRACE) return false;
     const d = dm.defected.get(p);
     if (d && d.liege === q && t - d.year < RESUBMIT_REST) return false;
     // 有限竞争之约(treaties.ts):不收约国的藩属
@@ -630,7 +634,8 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     // 新立国规则(riseRules.ts):被强得多的邻国宣战,小国可以当场遣使称臣、攻方受降罢兵
     // 肯不肯看守方在位君主(好战越低越肯,rulers.ts)、同族异族、离攻方国都远近(远的攻方更肯受降);有分量的盟国撑腰就不降
     const rk = pm.knobs.get(RISE_KNOBS);
-    if (t >= rk.FROM && dm.liegeOf(y) < 0 && dm.liegeOf(x) < 0 && !dm.vassalsOf(y).length && pm.size[y] <= SUBMIT_MAX && !api.war.revolt?.(w) && !halted(x, t)) {
+    const young = t >= rk.FROM7 && t - pm.polities[y].founded < rk.SUBMIT_GRACE; // 疆土与封建:新国被宣战也不当场称臣
+    if (t >= rk.FROM && !young && dm.liegeOf(y) < 0 && dm.liegeOf(x) < 0 && !dm.vassalsOf(y).length && pm.size[y] <= SUBMIT_MAX && !api.war.revolt?.(w) && !halted(x, t)) {
       powMemo.clear();
       const px = powerOf(x, t), py = powerOf(y, t);
       const backed = dm.alliesOf(y).some((z) => powerOf(z, t) >= 0.5 * px);

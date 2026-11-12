@@ -122,6 +122,8 @@ export interface PoliticsApi {
   strain?: (P: Polity, t: Year) => number;
   /** 动荡(control.ts 提供,读每年年初算的数表;没挂 = 只看危机):分裂的"动荡"那一项用它 */
   unrest?: (P: Polity, t: Year) => number;
+  /** 国都行政能力下能稳管的州数(control.ts 提供;疆土与封建的分封用) */
+  governable?: (p: number, t: Year) => number;
   /** 这一年里又有 n 州闹了饥荒,动荡再加多少(control.ts 提供;表里下一年才算进去,民变当时就要算上) */
   famineBump?: (P: Polity, n: number) => number;
   /** 看内政时最先看的大崩解(unrest.ts 提供):崩了 = true,这一次看内政就到此为止 */
@@ -172,7 +174,9 @@ export interface DiplomacyApi {
   /** 立约(treaties.ts 提供):看邦交时称臣、结盟都没成,接着看要不要和邻国立约(threat = 最怕的强邻,−1 = 没有) */
   onCheck?: (p: number, k: number, t: Year, threat: number) => void;
   /** 分藩(新立国规则):刚分出去的 v 仍向原国 L 称臣;成了 = true */
-  vassalize?: (v: number, L: number, t: Year) => boolean;
+  vassalize?: (v: number, L: number, t: Year, cause?: 'enfeoff') => boolean;
+  /** p 此刻的宗主(没有 = −1;installDiplomacy 提供) */
+  liegeOf?: (p: number) => number;
 }
 
 /** dev那一组(原来挂在 DevModel 上) */

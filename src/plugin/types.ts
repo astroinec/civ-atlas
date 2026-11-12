@@ -338,7 +338,7 @@ export type InterventionInfo = (
   | { kind: 'regent'; a: string; person?: undefined; char: number; born: number; died?: number; from: number; how: 'chancellor' | 'general'; end: 'return'; years?: number; leanings: Leanings }
   | { kind: 'marry'; a: string; person: string; b: string; from: number; how?: 'give' | 'mutual' }
   | { kind: 'appoint'; a: string; char: number; role: 'general' | 'minister'; born: number; died?: number; from: number; until?: number; skill?: 'good' | 'great' }
-  | { kind: 'boost'; a: string; from: number; mul?: 3 | 10; until?: number; regions?: string[] }
+  | { kind: 'boost'; a: string; from: number; mul?: 1.1 | 1.2 | 3 | 10; until?: number; regions?: string[] }
   | { kind: 'trek'; folk: string; from: number; region?: string; to?: string; reach?: 'near' | 'far'; dir?: 'east' | 'south' | 'west' | 'north' }
   | { kind: 'stay'; folk: string; from: number; until?: number }
   | { kind: 'mission'; a: string; b: string; from: number; until: number; mul: number }

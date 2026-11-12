@@ -196,6 +196,7 @@ add(
   num({ id: 'split.pactFrom', name: '自由结盟起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.farmDefFrom', name: '农耕守势起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.devLeanFrom', name: '发展倾向起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
+  num({ id: 'split.realmFrom', name: '疆土与封建起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.age', name: '王朝老了人心渐散' }, { official: 0.6, min: 0, max: 2, step: 0.1, unit: '' }),
 );
 

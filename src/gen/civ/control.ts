@@ -713,6 +713,13 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     return g ? Math.max(0, u + GUIDE_UNREST * g) : u;
   };
   api.politics.unrest = (P, t) => guided(P.id, t, P.id < tU.length ? tU[P.id] : 0);
+  api.politics.governable = (p, t) => {
+    const P = pm.polities[p];
+    if (!P || P.ended !== undefined) return Infinity;
+    const dev = devModelOf(sim);
+    const v = dev ? dev.cur[capRegion(P, t) * CAP_COUNT + Cap.Administration] : 0;
+    return riseK.OVER_BASE + riseK.OVER_PER * Math.max(0, Number.isFinite(v) ? v : 0);
+  };
   api.war.unrest = (p, t) => guided(p, t, p < tU.length ? tU[p] : 0);
   // ---- 钱粮:国用不足(窘迫)让宣战少、战事早罢(wars.ts) ----
   api.war.broke = (p, _t) => (p < tBroke.length ? tBroke[p] : 0);

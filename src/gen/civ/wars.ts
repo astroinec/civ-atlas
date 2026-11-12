@@ -87,6 +87,7 @@
 import type { World } from '../world';
 import { coldShare, coldSpellEnd, yearClimate } from '../seasons';
 import { AdjKind, Layer, type Annal, type AnnalCause, type Civ, type Polity, type Year } from './types';
+import { Biome } from '../biomes';
 import { fexp, flog, fpow, keyed, keyed4, round24, subSeed } from './engine/rand';
 import { bookChain, LOOK_K, quantize, type CivSim } from './engine/sim';
 import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, powerScaleOf, regentOf, rulerOf, type PolityModel } from './polities';
@@ -517,6 +518,22 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (culture[r] === Y.culture) sy *= HOME_DEF;
     // 农耕守势(规则项 split.farmDefFrom;riseRules.ts):农耕国、大河国在本族的州上守得更牢;没生效 = 不乘,和原来逐位一样
     if (t >= riseK.FROM5 && culture[r] === Y.culture && (Y.kind === 'farm' || Y.kind === 'river')) sy *= riseK.FARM_DEF;
+    // 疆土与封建(riseRules.ts 第七批):州自身的地形 —— 高山、湿地雨林、荒漠易守难攻;游牧骑兵进山林吃亏、在开阔地占便宜
+    if (t >= riseK.FROM7) {
+      const el = reg.elevation[r];
+      const bi = reg.biome[r];
+      let f = 1;
+      for (let i = riseK.TERRAIN_ELEV.length - 1; i >= 0; i--) if (el >= riseK.TERRAIN_ELEV[i]) { f = riseK.TERRAIN_ELEV_DEF[i]; break; }
+      const wet = bi === Biome.Wetland || bi === Biome.Rainforest || bi === Biome.TemperateRainforest;
+      const dry = bi === Biome.HotDesert || bi === Biome.TemperateDesert || bi === Biome.ColdDesert;
+      if (wet) f *= riseK.TERRAIN_WET_DEF;
+      else if (dry) f *= riseK.TERRAIN_DRY_DEF;
+      sy *= f;
+      if (X.kind === 'nomad') {
+        if (el >= riseK.TERRAIN_ELEV[1] || wet || bi === Biome.Taiga) sx *= riseK.NOMAD_ROUGH;
+        else if (dry || bi === Biome.Steppe || bi === Biome.Savanna) sx *= riseK.NOMAD_OPEN;
+      }
+    }
     if (pm.settlements[capitalAt(Y, t)].region === r) sy *= CAPITAL_DEF;
     if (wm.iv?.protects(y, t)) sy *= PROTECT_DEF; // 阶段 4 干预"不许灭":守得格外牢
     const a2 = sx * sx;
@@ -901,6 +918,12 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       // 记恨:近年在战场上输给它、丢了州
       if (t - (wm.grudge.get(p * 32768 + q) ?? -Infinity) < GRUDGE_YEARS) o *= GRUDGE;
       if (pol && picks(pm, pol.foes, q)) o *= FOE_ODDS;
+      // 疆土与封建(riseRules.ts 第七批):管不过来的大国少扩张(超出能稳管的州数越多,宣战越少);立国不满 SUBMIT_GRACE 年的国家也少挨打
+      if (t >= riseK.FROM7) {
+        const gov = api.politics.governable?.(p, t) ?? Infinity;
+        if (pm.size[p] > gov) o *= fpow(gov / pm.size[p], riseK.OVER_WAR_EXP);
+        if (Q.parent === undefined && t - Q.founded < riseK.SUBMIT_GRACE) o *= riseK.YOUNG_PREY;
+      }
       // 边境对面有本国缺的物产:盯上它(门槛要的那样算两样)
       let got = 0;
       if (lack && lack.want) {
