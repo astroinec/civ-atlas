@@ -59,8 +59,8 @@ export const RISE_KNOBS = defineKnobs('rise', {
    * 每份 = 本国应缴的 TRADE_PER,再乘当朝的重商倾向(50 = 1 倍,每偏 50 增减 TRADE_LEAN),全国最多应缴的 TRADE_CAP。
    * 商道断了、废了就没有;按上一个整步(商道每 20 年算一步)时通着的商道算,和推演怎么分段无关
    */
-  TRADE_PER: 0.02,
+  TRADE_PER: 0.04,
   TRADE_PASS: 0.5,
   TRADE_LEAN: 0.5,
-  TRADE_CAP: 0.08,
+  TRADE_CAP: 0.15,
 });
