@@ -221,7 +221,7 @@ export const RISE_KNOBS = defineKnobs('rise', {
   BLOC_MIN: 3,
   BLOC_MAX: 5,
   FED_MIN: 2,
-  BLOC_P: 0.15,
+  BLOC_P: 0.2,
   FEDERAL_P: 0.5,
   FED_HOLD: 60,
   FED_SAFE: 1.5,
@@ -231,4 +231,6 @@ export const RISE_KNOBS = defineKnobs('rise', {
    *      结亲、立约仍按原来的节奏;变的是反应快了——强邻一坐大、外患一消,十年内就有动作。结邦、联邦分立的机会是按十年一次定的
    */
   DIP8_EVERY: 10,
+  /** ⑥ 结盟赔率再乘这个数(自由结盟每十年约 12% → 约 17%) */
+  PACT8_MUL: 1.6,
 });

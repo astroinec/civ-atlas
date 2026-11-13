@@ -663,7 +663,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     if (best < 0) return false;
     // 自由结盟时不看对着的邻国比自己强多少:有合适的盟友就按固定的赔率结(riseK.PACT_FREE)
     const odds = (free ? riseK.PACT_FREE : PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT)) * (cowar ? PACT_COWAR : 1) * (realm(t) && ratio >= riseK7.COALITION_RATIO ? riseK7.COALITION_ODDS : 1);
-    if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= sc(odds / (1 + odds), t)) return false;
+    // 审势与立国:结盟赔率再乘 PACT8_MUL(稍微好结一些)
+    const odds8 = t >= riseK7.FROM8 ? odds * riseK7.PACT8_MUL : odds;
+    if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= sc(odds8 / (1 + odds8), t)) return false;
     const sid = capitalAt(pm.polities[p], t);
     record('alliance', { a: p, b: best, region: pm.settlements[sid].region, settlement: sid, foe: f });
     return true;
