@@ -598,7 +598,8 @@ function titlesOf(p: Polity, root: string): Titles {
   let t = m.get(key);
   if (!t) {
     const lineage = p.lineage ?? 'realm';
-    t = p.eastern ? easternTitles(root, lineage) : (POLITY_FORMS[lineage].map((f) => root + f) as unknown as Titles);
+    // 作者起的"某某联邦"(几国合成的一邦):国号就是它,各档都不再接"部 / 国 / 共和国"
+    t = root.endsWith('联邦') ? [root, root, root, root] : p.eastern ? easternTitles(root, lineage) : (POLITY_FORMS[lineage].map((f) => root + f) as unknown as Titles);
     m.set(key, t);
   }
   return t;
