@@ -221,9 +221,14 @@ export const RISE_KNOBS = defineKnobs('rise', {
   BLOC_MIN: 3,
   BLOC_MAX: 5,
   FED_MIN: 2,
-  BLOC_P: 0.35,
+  BLOC_P: 0.15,
   FEDERAL_P: 0.5,
   FED_HOLD: 60,
   FED_SAFE: 1.5,
-  FED_SPLIT_P: 0.2,
+  FED_SPLIT_P: 0.05,
+  /**
+   *   ⑤ 看邦交改成每 DIP8_EVERY 年一次(原 40 年):自立、改档、纳土、渐废、称臣、结盟的机会折成同样的每年机会,
+   *      结亲、立约仍按原来的节奏;变的是反应快了——强邻一坐大、外患一消,十年内就有动作。结邦、联邦分立的机会是按十年一次定的
+   */
+  DIP8_EVERY: 10,
 });

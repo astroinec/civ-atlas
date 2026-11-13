@@ -324,6 +324,29 @@ export function diplomacyModelOf(sim: CivSim): DiplomacyModel | undefined {
 
 /** 国家 p 第 k 次看邦交的时刻 */
 function checkTime(dm: DiplomacyModel, p: number, k: number): number {
+  const rk = dm.pm.knobs.get(RISE_KNOBS);
+  if (!(rk.FROM8 < 65535)) return checkTime0(dm, p, k);
+  // 审势与立国(riseRules.ts 第八批):FROM8 起每 DIP8_EVERY 年看一次(原来那一串里第一次落在 FROM8 以后的那一次起换)
+  const k8 = dip8Index(dm, p);
+  if (k < k8) return checkTime0(dm, p, k);
+  const u = keyed(dm.base, dm.pm.ptag[p], k, U_CHECK_T);
+  if (k8 === 0) {
+    if (k === 0) return checkTime0(dm, p, 0);
+    const P = dm.pm.polities[p];
+    const t0 = P.founded + Math.min(dm.k.DIP_FIRST, P.founded >= rk.FROM ? rk.DIP_FIRST : dm.k.DIP_FIRST);
+    return t0 + 1 + rk.DIP8_EVERY * (k - 1 + 0.2 + 0.6 * u);
+  }
+  return rk.FROM8 + rk.DIP8_EVERY * (k - k8 + 0.2 + 0.6 * u);
+}
+/** 国家 p 第几次看邦交起换成第八批的间隔(那一次是原来那一串里第一次落在 FROM8 以后的) */
+function dip8Index(dm: DiplomacyModel, p: number): number {
+  const rk = dm.pm.knobs.get(RISE_KNOBS);
+  let k = 0;
+  while (checkTime0(dm, p, k) < rk.FROM8) k++;
+  return k;
+}
+/** 原来的间隔 */
+function checkTime0(dm: DiplomacyModel, p: number, k: number): number {
   const { DIP_FIRST, DIP_EVERY } = dm.k;
   const P = dm.pm.polities[p];
   // 新立国规则(riseRules.ts):这一年起新立的国家,头一次看邦交提前
@@ -345,7 +368,7 @@ function checkTime(dm: DiplomacyModel, p: number, k: number): number {
 export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyModel = new DiplomacyModel(pm, civApi(sim).diplomacy)): DiplomacyModel {
   const { KIN_PACT, KIN_JOIN } = pm.knobs.get(MARRIAGES_KNOBS);
   const { FRIEND_PACT, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
-  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER } = dm.k;
+  const { DIP_EVERY, MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER } = dm.k;
   const api = civApi(sim);
   const wm = warModelOf(sim);
   if (!wm) throw new Error('installDiplomacy:先 installWars');
@@ -459,6 +482,8 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   };
   const riseK7 = pm.knobs.get(RISE_KNOBS);
   const realm = (t: number) => t >= riseK7.FROM7;
+  /** 审势与立国:看邦交改成每 DIP8_EVERY 年一次后,原来按 DIP_EVERY 年一次定的机会折成同样的每年机会 */
+  const sc = (q: number, t: number) => (t >= riseK7.FROM8 ? 1 - Math.pow(1 - Math.max(0, Math.min(1, q)), riseK7.DIP8_EVERY / DIP_EVERY) : q);
   /** 宗主 L 还能收几个藩属(朝贡不算):VASSAL_BASE + 国都行政能力 × VASSAL_PER */
   const vassalRoom = (L: number, t: number): number => {
     const gov = api.politics.governable?.(L, t) ?? Infinity;
@@ -484,7 +509,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     let odds = DEFECT_ODDS * weakness(L, t) * fpow(Math.E, DEFECT_K * (ratio - DEFECT_R0)) * (trib ? riseK7.TRIB_DEFECT_MUL : 1);
     if (!borders(v, L) && !borders(L, v)) odds *= DEFECT_FAR;
     if (pm.polities[v].culture !== pm.polities[L].culture) odds *= DEFECT_FOREIGN;
-    if (keyed(dm.base, pm.ptag[v], k, U_DEFECT) >= odds / (1 + odds)) return false;
+    if (keyed(dm.base, pm.ptag[v], k, U_DEFECT) >= sc(odds / (1 + odds), t)) return false;
     record('defect', { a: v, b: L, region: capRegion(v, t), settlement: capitalAt(pm.polities[v], t) });
     // 宗主发兵讨伐:接壤、没在和它打、没被下令和它结盟、手上的仗没打满、没被下令不许扩张
     if (!halted(L, t) && !fighting(L, v) && !friendly(L, v, t) && !befriends(pm, L, v, t) && !busy(L) && borders(L, v) && keyed4(dm.base, pm.ptag[L], pm.ptag[v], k, U_PUNISH) < PUNISH * (trib ? riseK7.TRIB_PUNISH : 1)) {
@@ -497,13 +522,13 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   const tryUpgrade = (v: number, L: number, k: number, t: number): boolean => {
     if (t - (dm.sworn.get(v) ?? t) < riseK7.UPGRADE_AGE || !borders(v, L) || atWar(v) || vassalRoom(L, t) <= 0) return false;
     if (powerOf(L, t) < SUBMIT_RATIO * powerOf(v, t)) return false;
-    if (keyed4(dm.base, pm.ptag[v], pm.ptag[L], k, U_TIER) >= riseK7.UPGRADE_P) return false;
+    if (keyed4(dm.base, pm.ptag[v], pm.ptag[L], k, U_TIER) >= sc(riseK7.UPGRADE_P, t)) return false;
     swear(v, L, t);
     return true;
   };
   const tryDown = (v: number, L: number, k: number, t: number): boolean => {
     if (powerOf(v, t) < riseK7.DOWN_RATIO * powerOf(L, t)) return false;
-    if (keyed4(dm.base, pm.ptag[v], pm.ptag[L], k, U_TIER) >= riseK7.DOWN_P) return false;
+    if (keyed4(dm.base, pm.ptag[v], pm.ptag[L], k, U_TIER) >= sc(riseK7.DOWN_P, t)) return false;
     swear(v, L, t, -1, 'tribute');
     return true;
   };
@@ -520,7 +545,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     for (const r of mine) if (t - wm.since[r] < ABSORB_SETTLE) return false;
     let odds = ABSORB_ODDS;
     if (V.culture !== pm.polities[L].culture) odds *= ABSORB_FOREIGN;
-    if (keyed4(dm.base, pm.ptag[L], pm.ptag[v], k, U_ABSORB) >= odds / (1 + odds)) return false;
+    if (keyed4(dm.base, pm.ptag[L], pm.ptag[v], k, U_ABSORB) >= sc(odds / (1 + odds), t)) return false;
     for (const r of mine) sim.setOwner(Layer.Polity, r, L, Ev.Merge);
     endPolity(pm, v, t);
     pol?.merged.add(v);
@@ -534,7 +559,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const f = x.foe;
     if (alive(f) && powerOf(f, t) >= LAPSE_RATIO * Math.max(powerOf(x.a, t), powerOf(x.b, t))) return false;
     const o = x.a === p ? x.b : x.a;
-    if (keyed4(dm.base, pm.ptag[p], pm.ptag[o], k, U_LAPSE) >= LAPSE_P) return false;
+    if (keyed4(dm.base, pm.ptag[p], pm.ptag[o], k, U_LAPSE) >= sc(LAPSE_P, t)) return false;
     record('unally', { a: p, b: o, cause: 'lapse' });
     return true;
   };
@@ -577,7 +602,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     let odds = SUBMIT_ODDS * fpow(ratio / SUBMIT_RATIO, SUBMIT_EXP) * pm.polities[q].expansionism;
     // 合纵(疆土与封建):有了盟友就少朝贡
     if (realm(t) && dm.alliesOf(p).length) odds *= riseK7.COALITION_SUBMIT;
-    if (keyed(dm.base, pm.ptag[p], k, U_SUBMIT) >= odds / (1 + odds)) return false;
+    if (keyed(dm.base, pm.ptag[p], k, U_SUBMIT) >= sc(odds / (1 + odds), t)) return false;
     // 疆土与封建:主动称臣只是朝贡(名义尊奉)
     swear(p, q, t, -1, realm(t) ? 'tribute' : undefined);
     return true;
@@ -638,7 +663,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     if (best < 0) return false;
     // 自由结盟时不看对着的邻国比自己强多少:有合适的盟友就按固定的赔率结(riseK.PACT_FREE)
     const odds = (free ? riseK.PACT_FREE : PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT)) * (cowar ? PACT_COWAR : 1) * (realm(t) && ratio >= riseK7.COALITION_RATIO ? riseK7.COALITION_ODDS : 1);
-    if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= odds / (1 + odds)) return false;
+    if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= sc(odds / (1 + odds), t)) return false;
     const sid = capitalAt(pm.polities[p], t);
     record('alliance', { a: p, b: best, region: pm.settlements[sid].region, settlement: sid, foe: f });
     return true;
@@ -741,7 +766,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     if (!P || P.ended !== undefined) return;
     sim.schedule(checkTime(dm, p, k + 1), Ev.DiplomacyCheck, k + 1, p);
     // 结亲(marriage.ts):不占"一次最多出一件事"
-    api.diplomacy.marry?.(p, k, t);
+    // 审势与立国:看得勤了,结亲、立约照原来的节奏(每 DIP_EVERY 年一次)看,机会不变
+    const slow = t >= riseK.FROM8 && (k - dip8Index(dm, p)) % Math.max(1, Math.round(DIP_EVERY / riseK.DIP8_EVERY)) !== 0;
+    if (!slow) api.diplomacy.marry?.(p, k, t);
     const L = dm.liegeOf(p);
     if (L >= 0) {
       if (!dm.tribute.has(p)) {
@@ -770,7 +797,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       if (g >= 0 && tryPact(p, g, gr, k, t)) return;
     }
     // 立约(treaties.ts)
-    api.diplomacy.onCheck?.(p, k, t, f);
+    if (!slow) api.diplomacy.onCheck?.(p, k, t, f);
   });
 
   // ---- 战争里 ----
