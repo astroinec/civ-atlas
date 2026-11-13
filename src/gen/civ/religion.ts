@@ -503,6 +503,12 @@ export class FaithSim {
       for (const f of faithOrder[p]) if (count[p * F + f] > bestN) [best, bestN] = [f, count[p * F + f]];
       const cur = stateOf[p];
       const n = (f: number) => (f >= 0 && f < F ? count[p * F + f] : 0);
+      // 教国(疆土与封建,politics.ts):永奉本教
+      const theo = pols[p].theocracy;
+      if (theo !== undefined && theo < F) {
+        if (cur !== theo) this.adoptState(y, p, theo);
+        continue;
+      }
       if (capF >= 0 && !folk(capF) && cur !== capF && (cur < 0 || n(capF) > n(cur))) this.adoptState(y, p, capF);
       else if (cur < 0 && bestN >= ADOPT * total[p]) {
         this.adoptState(y, p, best);

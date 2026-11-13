@@ -59,6 +59,7 @@ import type { CivModule } from './modules';
 import { Ev } from './events';
 import { civApi, type DiplomacyApi } from './api';
 import { defineKnobs } from './engine/knobs';
+import { faithSimOf } from './religion';
 
 // ---- 调参(以截图和统计数为准,见 scripts/gen-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -160,6 +161,8 @@ const U_RESCUE = 8;
 const U_PUNISH = 9;
 const U_SUE = 10;
 const U_DECLARE_SUBMIT = 11;
+const U_TIER = 12;
+const U_THEO = 13;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -190,6 +193,8 @@ export class DiplomacyModel {
   readonly liege = new Map<number, number>();
   /** 藩属 → 称臣的年份 */
   readonly sworn = new Map<number, Year>();
+  /** 只是朝贡(名义尊奉)的那些(疆土与封建;其余在 liege 里的是藩属) */
+  readonly tribute = new Set<number>();
   /** 国家 → 最近一次自立(不再称臣)时的宗主、年份 */
   readonly defected = new Map<number, { liege: number; year: Year }>();
   /** 两国最近一次盟约断了的年份(键见 pairKey) */
@@ -216,6 +221,11 @@ export class DiplomacyModel {
   liegeOf(p: number): number {
     const l = this.liege.get(p);
     return l !== undefined && this.alive(l) && this.alive(p) ? l : -1;
+  }
+
+  /** p 此刻向别国朝贡(只是名义尊奉,不是藩属) */
+  tributary(p: number): boolean {
+    return this.liegeOf(p) >= 0 && this.tribute.has(p);
   }
 
   /** 国家 p 此刻的藩属(编号升序) */
@@ -285,11 +295,15 @@ export class DiplomacyModel {
       if (x) this.drop(x, e.year);
       else this.broken.set(pairKey(e.a, e.b), e.year);
     } else if (e.kind === 'submit') {
+      // 同一宗主下改档(朝贡升藩属、藩属降朝贡)不重算称臣的年份
+      if (this.liege.get(e.a) !== e.b) this.sworn.set(e.a, e.year);
       this.liege.set(e.a, e.b);
-      this.sworn.set(e.a, e.year);
+      if (e.cause === 'tribute') this.tribute.add(e.a);
+      else this.tribute.delete(e.a);
     } else if (e.kind === 'defect') {
       this.liege.delete(e.a);
       this.sworn.delete(e.a);
+      this.tribute.delete(e.a);
       this.defected.set(e.a, { liege: e.b, year: e.year });
     }
   }
@@ -344,7 +358,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
 
   const record = (kind: Annal['kind'], f: Partial<Omit<Annal, 'year' | 'kind'>>) => {
     sim.record(kind, f);
-    dm.apply({ year: sim.now, kind, a: f.a ?? -1, b: f.b ?? -1, region: -1, settlement: -1, war: f.war ?? -1, ...(f.foe !== undefined ? { foe: f.foe } : {}) });
+    dm.apply({ year: sim.now, kind, a: f.a ?? -1, b: f.b ?? -1, region: -1, settlement: -1, war: f.war ?? -1, ...(f.foe !== undefined ? { foe: f.foe } : {}), ...(f.cause !== undefined ? { cause: f.cause } : {}) });
   };
   api.diplomacy.note = record;
   // 分藩(新立国规则):分出去的 v 仍向原国 L 称臣(原国不是别国的藩属;politics.ts 调)
@@ -432,30 +446,66 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   };
 
   /** 一国称臣:记 submit;它结着的盟随之作废(各记一条 unally,cause = vassal) */
-  const swear = (v: number, L: number, t: number, war = -1, cause?: 'enfeoff') => {
+  const swear = (v: number, L: number, t: number, war = -1, cause?: 'enfeoff' | 'tribute') => {
     const sid = capitalAt(pm.polities[v], t);
     record('submit', { a: v, b: L, region: pm.settlements[sid].region, settlement: sid, war, ...(cause ? { cause } : {}) });
-    for (const x of dm.pactsOf(v)) record('unally', { a: v, b: x.a === v ? x.b : x.a, cause: 'vassal' });
+    // 朝贡国照样可以另结盟;藩属的盟约随之作废
+    if (cause !== 'tribute') for (const x of dm.pactsOf(v)) record('unally', { a: v, b: x.a === v ? x.b : x.a, cause: 'vassal' });
+  };
+  const riseK7 = pm.knobs.get(RISE_KNOBS);
+  const realm = (t: number) => t >= riseK7.FROM7;
+  /** 宗主 L 还能收几个藩属(朝贡不算):VASSAL_BASE + 国都行政能力 × VASSAL_PER */
+  const vassalRoom = (L: number, t: number): number => {
+    const gov = api.politics.governable?.(L, t) ?? Infinity;
+    const adm = Number.isFinite(gov) ? Math.max(0, (gov - riseK7.OVER_BASE) / riseK7.OVER_PER) : 9;
+    const cap = riseK7.VASSAL_BASE + Math.floor(adm * riseK7.VASSAL_PER);
+    return cap - dm.vassalsOf(L).filter((v) => !dm.tribute.has(v)).length;
+  };
+  /** 战败称臣:宗主还管得过来就收为藩属,否则只收朝贡 */
+  const sueTier = (L: number, t: number): 'tribute' | undefined => (realm(t) && vassalRoom(L, t) <= 0 ? 'tribute' : undefined);
+  // 政教(疆土与封建):p、q 的国教所属大教(没有 / 民间信仰 = −1);奉为国教的国家数(大教)
+  const faithRoot = (p: number): number => {
+    const fs = faithSimOf(sim);
+    if (!fs) return -1;
+    const f = fs.stateFaith(p);
+    return f >= 0 && !fs.folk(f) ? fs.rootOf(f) : -1;
   };
 
   // ---- ① 藩属自立 ----
   const tryDefect = (v: number, L: number, k: number, t: number): boolean => {
-    if (t - (dm.sworn.get(v) ?? t) < DEFECT_MIN) return false;
+    const trib = dm.tribute.has(v);
+    if (t - (dm.sworn.get(v) ?? t) < (trib ? riseK7.TRIB_DEFECT_MIN : DEFECT_MIN)) return false;
     const ratio = powerOf(v, t) / powerOf(L, t);
-    let odds = DEFECT_ODDS * weakness(L, t) * fpow(Math.E, DEFECT_K * (ratio - DEFECT_R0));
+    let odds = DEFECT_ODDS * weakness(L, t) * fpow(Math.E, DEFECT_K * (ratio - DEFECT_R0)) * (trib ? riseK7.TRIB_DEFECT_MUL : 1);
     if (!borders(v, L) && !borders(L, v)) odds *= DEFECT_FAR;
     if (pm.polities[v].culture !== pm.polities[L].culture) odds *= DEFECT_FOREIGN;
     if (keyed(dm.base, pm.ptag[v], k, U_DEFECT) >= odds / (1 + odds)) return false;
     record('defect', { a: v, b: L, region: capRegion(v, t), settlement: capitalAt(pm.polities[v], t) });
     // 宗主发兵讨伐:接壤、没在和它打、没被下令和它结盟、手上的仗没打满、没被下令不许扩张
-    if (!halted(L, t) && !fighting(L, v) && !friendly(L, v, t) && !befriends(pm, L, v, t) && !busy(L) && borders(L, v) && keyed4(dm.base, pm.ptag[L], pm.ptag[v], k, U_PUNISH) < PUNISH) {
+    if (!halted(L, t) && !fighting(L, v) && !friendly(L, v, t) && !befriends(pm, L, v, t) && !busy(L) && borders(L, v) && keyed4(dm.base, pm.ptag[L], pm.ptag[v], k, U_PUNISH) < PUNISH * (trib ? riseK7.TRIB_PUNISH : 1)) {
       api.war.declare!(L, v, t, -1, 'punish');
     }
     return true;
   };
 
+  // ---- 宗藩改档(疆土与封建):朝贡久了升为藩属;藩属壮大了降为朝贡 ----
+  const tryUpgrade = (v: number, L: number, k: number, t: number): boolean => {
+    if (t - (dm.sworn.get(v) ?? t) < riseK7.UPGRADE_AGE || !borders(v, L) || atWar(v) || vassalRoom(L, t) <= 0) return false;
+    if (powerOf(L, t) < SUBMIT_RATIO * powerOf(v, t)) return false;
+    if (keyed4(dm.base, pm.ptag[v], pm.ptag[L], k, U_TIER) >= riseK7.UPGRADE_P) return false;
+    swear(v, L, t);
+    return true;
+  };
+  const tryDown = (v: number, L: number, k: number, t: number): boolean => {
+    if (powerOf(v, t) < riseK7.DOWN_RATIO * powerOf(L, t)) return false;
+    if (keyed4(dm.base, pm.ptag[v], pm.ptag[L], k, U_TIER) >= riseK7.DOWN_P) return false;
+    swear(v, L, t, -1, 'tribute');
+    return true;
+  };
+
   // ---- ② 纳土归附 ----
   const tryAbsorb = (L: number, v: number, k: number, t: number): boolean => {
+    if (dm.tribute.has(v)) return false; // 朝贡国不纳土
     const V = pm.polities[v];
     const n = pm.size[v];
     if (t - (dm.sworn.get(v) ?? t) < ABSORB_AGE || n <= 0 || n > ABSORB_MAX || pm.size[L] < ABSORB_RATIO * n) return false;
@@ -491,7 +541,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     let bestScore = 0;
     let bestRatio = 0;
     for (const q of neighbors(p)) {
-      if (friendly(p, q, t) || dm.liegeOf(q) >= 0 || halted(q, t)) continue;
+      if (friendly(p, q, t) || (dm.liegeOf(q) >= 0 && !dm.tribute.has(q)) || halted(q, t)) continue;
       const ratio = powerOf(q, t) / pp;
       const war = fighting(p, q);
       if (ratio < THREAT && !war) continue;
@@ -506,7 +556,8 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   };
 
   const trySubmit = (p: number, q: number, ratio: number, k: number, t: number): boolean => {
-    if (ratio < SUBMIT_RATIO || pm.size[p] > SUBMIT_MAX || fighting(p, q) || dm.vassalsOf(p).length || fightsBloc(p, q)) return false;
+    if (dm.liegeOf(p) >= 0) return false;
+    if (ratio < (realm(t) ? riseK7.TRIB_RATIO : SUBMIT_RATIO) || pm.size[p] > SUBMIT_MAX || fighting(p, q) || dm.vassalsOf(p).length || fightsBloc(p, q)) return false;
     // 疆土与封建(riseRules.ts 第七批):立国不满 SUBMIT_GRACE 年的国家不主动称臣
     const rk7 = pm.knobs.get(RISE_KNOBS);
     if (t >= rk7.FROM7 && t - pm.polities[p].founded < rk7.SUBMIT_GRACE) return false;
@@ -517,9 +568,12 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     // 有够分量的盟国撑腰就不称臣
     const pq = powerOf(q, t);
     for (const z of dm.alliesOf(p)) if (powerOf(z, t) >= 0.5 * pq) return false;
-    const odds = SUBMIT_ODDS * fpow(ratio / SUBMIT_RATIO, SUBMIT_EXP) * pm.polities[q].expansionism;
+    let odds = SUBMIT_ODDS * fpow(ratio / SUBMIT_RATIO, SUBMIT_EXP) * pm.polities[q].expansionism;
+    // 合纵(疆土与封建):有了盟友就少朝贡
+    if (realm(t) && dm.alliesOf(p).length) odds *= riseK7.COALITION_SUBMIT;
     if (keyed(dm.base, pm.ptag[p], k, U_SUBMIT) >= odds / (1 + odds)) return false;
-    swear(p, q, t);
+    // 疆土与封建:主动称臣只是朝贡(名义尊奉)
+    swear(p, q, t, -1, realm(t) ? 'tribute' : undefined);
     return true;
   };
 
@@ -553,7 +607,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       for (const z of around(p, t)) if (!cands.includes(z)) cands.push(z);
     }
     for (const z of cands) {
-      if (z === p || z === f || dm.liegeOf(z) >= 0 || friendly(z, f, t) || friendly(z, p, t) || fighting(z, p)) continue;
+      if (z === p || z === f || (dm.liegeOf(z) >= 0 && !dm.tribute.has(z)) || dm.liegeOf(z) === f || friendly(z, f, t) || friendly(z, p, t) || fighting(z, p)) continue;
       if (dm.alliesOf(z).length >= maxPacts || t - (dm.broken.get(pairKey(p, z)) ?? -Infinity) < rest) continue;
       if (pm.policies.size && (picks(pm, pol?.foes, z) || hates(pm, z, p, t))) continue;
       const pz = powerOf(z, t);
@@ -561,6 +615,12 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       if (!free && (pz < PACT_MIN_POWER * pf || (!war && pf < PACT_FEAR * pz))) continue;
       let score = Math.min(1, pz / pf) * (war ? PACT_COWAR : 1) * (borders(p, z) ? 1.5 : 1);
       if (pol && picks(pm, pol.friends, z)) score *= FRIEND_PACT;
+      // 疆土与封建:合纵 —— 同样挨着这个强邻的先找;同奉一个大教的先找
+      if (realm(t)) {
+        if (ratio >= riseK7.COALITION_RATIO && borders(z, f)) score *= riseK7.COALITION_SCORE;
+        const fz = faithRoot(z);
+        if (fz >= 0 && fz === faithRoot(p)) score *= riseK7.FAITH_PACT;
+      }
       // 结着亲的先找(marriage.ts)
       if (api.diplomacy.bond) score *= 1 + (KIN_PACT - 1) * api.diplomacy.bond(p, z, t);
       if (score > bestScore) {
@@ -571,7 +631,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     }
     if (best < 0) return false;
     // 自由结盟时不看对着的邻国比自己强多少:有合适的盟友就按固定的赔率结(riseK.PACT_FREE)
-    const odds = (free ? riseK.PACT_FREE : PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT)) * (cowar ? PACT_COWAR : 1);
+    const odds = (free ? riseK.PACT_FREE : PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT)) * (cowar ? PACT_COWAR : 1) * (realm(t) && ratio >= riseK7.COALITION_RATIO ? riseK7.COALITION_ODDS : 1);
     if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= odds / (1 + odds)) return false;
     const sid = capitalAt(pm.polities[p], t);
     record('alliance', { a: p, b: best, region: pm.settlements[sid].region, settlement: sid, foe: f });
@@ -602,14 +662,23 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     api.diplomacy.marry?.(p, k, t);
     const L = dm.liegeOf(p);
     if (L >= 0) {
-      tryDefect(p, L, k, t);
-      return;
+      if (!dm.tribute.has(p)) {
+        // 藩属:壮大了先降为朝贡(疆土与封建),否则看要不要自立
+        if (realm(t) && tryDown(p, L, k, t)) return;
+        tryDefect(p, L, k, t);
+        return;
+      }
+      // 朝贡国:断贡、升为藩属,都没有就照常经营邦交(可以另结盟)
+      if (tryDefect(p, L, k, t) || tryUpgrade(p, L, k, t)) return;
     }
     for (const v of dm.vassalsOf(p)) if (tryAbsorb(p, v, k, t)) return;
     for (const x of dm.pactsOf(p)) if (tryLapse(x, p, k, t)) return;
     const pp = powerOf(p, t);
     const [f, ratio] = mainThreat(p, t, pp);
-    if (f >= 0 && (trySubmit(p, f, ratio, k, t) || tryPact(p, f, ratio, k, t))) return;
+    // 合纵(疆土与封建):强邻强得多时先找盟友,找不到才朝贡
+    if (f >= 0 && realm(t) && ratio >= riseK7.COALITION_RATIO) {
+      if (tryPact(p, f, ratio, k, t) || trySubmit(p, f, ratio, k, t)) return;
+    } else if (f >= 0 && (trySubmit(p, f, ratio, k, t) || tryPact(p, f, ratio, k, t))) return;
     // 自由结盟(riseRules.ts):没有强邻也可以找盟友
     if (f < 0 && t >= riseK.FROM4) {
       const [g, gr] = anyRival(p, t, pp);
@@ -646,7 +715,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
         if (pm.capDist[x][capRegion(y, t)] > SUE_FAR) p *= 1.4;
         if (keyed4(dm.base, pm.ptag[y], pm.ptag[x], Math.round(t * 256), U_DECLARE_SUBMIT) < Math.min(0.85, p)) {
           api.war.makePeace!(w, t);
-          if (alive(y)) swear(y, x, t, w.id);
+          if (alive(y)) swear(y, x, t, w.id, realm(t) ? 'tribute' : undefined);
           return;
         }
       }
@@ -667,7 +736,15 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const L = dm.liegeOf(y);
     if (L >= 0 && L !== x && !friendly(L, x, t) && !befriends(pm, L, x, t) && !fighting(L, x) && !halted(L, t) && !busy(L)) {
       const near = borders(L, x);
-      if ((near || (t >= rk.FROM2 && reach(L, x, y, t))) && keyed4(dm.base, pm.ptag[L], pm.ptag[x], Math.round(t * 256), U_RESCUE) < RESCUE * (near ? 1 : rk.FAR_JOIN)) api.war.declare!(L, x, t, y, 'rescue');
+      if ((near || (t >= rk.FROM2 && reach(L, x, y, t))) && keyed4(dm.base, pm.ptag[L], pm.ptag[x], Math.round(t * 256), U_RESCUE) < RESCUE * (near ? 1 : rk.FAR_JOIN) * (dm.tribute.has(y) ? 0.5 : 1)) api.war.declare!(L, x, t, y, 'rescue');
+    }
+    // 护教(疆土与封建):教国挨打,挨着攻方的同教之国发兵
+    const theo = pm.polities[y].theocracy ?? (api.war.holySeat?.(y) ?? -1);
+    if (realm(t) && theo >= 0 && alive(y)) {
+      for (const z of neighbors(x)) {
+        if (z === y || !alive(z) || faithRoot(z) !== theo || friendly(z, x, t) || fighting(z, x) || halted(z, t) || busy(z)) continue;
+        if (keyed4(dm.base, pm.ptag[z], pm.ptag[x], Math.round(t * 256), U_THEO) < riseK7.THEO_RESCUE) api.war.declare!(z, x, t, y, 'theocracy');
+      }
     }
   };
 
@@ -694,7 +771,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     if (keyed4(dm.base, pm.ptag[a], pm.ptag[b], Math.round(w.start * 256) * 64 + (i & 63), U_SUE) >= offer * Math.min(0.9, accept)) return false;
     api.war.makePeace!(w, t);
     if (!alive(b)) return true;
-    swear(b, a, t, w.id);
+    swear(b, a, t, w.id, sueTier(a, t));
     return true;
   };
 

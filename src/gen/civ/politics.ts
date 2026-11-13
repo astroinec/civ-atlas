@@ -67,6 +67,7 @@ import { civApi } from './api';
 import { defineKnobs } from './engine/knobs';
 import { RISE_KNOBS } from './riseRules';
 import { mulOf } from './influence';
+import { faithSimOf } from './religion';
 
 // ---- 调参(以截图和统计数为准,见 scripts/gen-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -213,6 +214,7 @@ const U_BIG = 10;
 const U_VASSAL = 11;
 const U_FEUD = 12;
 const U_ABSORB = 13;
+const U_THEO = 14;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -910,8 +912,36 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     }
     return best;
   };
+  // ---- 教国(疆土与封建,riseRules.ts 第七批):大教的圣城立教国 ----
+  const tryTheocracy = (k: number, t: number) => {
+    const rk = pm.knobs.get(RISE_KNOBS);
+    const fs = faithSimOf(sim);
+    if (t < rk.FROM7 || !fs) return;
+    const rootOf = (p: number) => { const f = fs.stateFaith(p); return f >= 0 && !fs.folk(f) ? fs.rootOf(f) : -1; };
+    const states = new Map<number, number>();
+    for (const P of pm.polities) if (P.ended === undefined && pm.size[P.id] > 0) { const f = rootOf(P.id); if (f >= 0) states.set(f, (states.get(f) ?? 0) + 1); }
+    for (const F of fs.list) {
+      if (F.kind !== 'great' || F.holy === undefined || (states.get(F.id) ?? 0) < rk.THEO_STATES) continue;
+      if (pm.polities.some((P) => P.ended === undefined && P.theocracy === F.id)) continue;
+      const s = pm.settlements[F.holy];
+      if (!s || s.ended !== undefined) continue;
+      const r = s.region;
+      const o = owner[r];
+      if (culture[r] < 0 || wm.iv?.locked(r, t) || api.polity.closed?.(r, -1, t)) continue;
+      if (keyed(pol.base, pm.stag[s.id], k, U_THEO) >= rk.THEO_P) continue;
+      if (o < 0) {
+        const p = addPolity(pm, s.id, culture[r], t, { theocracy: F.id });
+        sim.setOwner(Layer.Polity, r, p.id, Ev.PolityFound);
+        sim.record('found', { a: p.id, region: r, settlement: s.id, cause: 'theocracy' });
+      } else if (rootOf(o) === F.id && capRegion(o, t) !== r && pm.size[o] >= 2 && settled(r, t) && !wm.wars.some((x) => x.end === undefined && (x.a === o || x.b === o))) {
+        secede(o, [r], s.id, r, t, { theocracy: F.id }, 'split', 'theocracy');
+      }
+    }
+  };
+
   sim.on(Ev.TribalCheck, (k, _b, t) => {
     sim.schedule(tribalTime(pol, k + 1), Ev.TribalCheck, k + 1, 0);
+    tryTheocracy(k, t);
     let caps: Uint8Array | null = null;
     let bigDone = 0;
     // 新立国规则下先看最大的城(同样大的按编号),大城自立每次最多 BIG_MAX 个

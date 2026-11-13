@@ -1644,6 +1644,8 @@ function warHead(civ: Civ, e: Annal, id: number, general: string): string {
       return general ? `${A}甫立,遣${general}伐${B}` : `${A}甫立,即伐${B}`;
     case 'rescue':
       return ally ? `${A}救其藩属${ally},${go(B)}` : `${A}${go(B)}`;
+    case 'theocracy':
+      return ally ? `${A}以护卫教国${ally}为名,${go(B)}` : `${A}护教,${go(B)}`;
     default:
       if (ally) return general ? `${A}应${ally}之约,遣${general}伐${B}` : `${A}应${ally}之约伐${B}`;
       return general ? `${A}遣${general}伐${B}` : `${A}伐${B}`;
@@ -1687,6 +1689,8 @@ function warReason(civ: Civ, e: Annal, id: number): string {
       return treatyWord(civ, breachOf(civ, e, id), (name) => `背${name},`, '背约,');
     case 'rescue':
       return ally ? `救其藩属${ally},` : '';
+    case 'theocracy':
+      return ally ? `护卫教国${ally},` : '护教,';
     default:
       // 援盟(自然结成的盟约、阶段 4 干预的结盟):settlement 列是盟国,不是城
       return ally ? `应${ally}之约,` : '';
@@ -1926,6 +1930,9 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       // 边缘立国:受邻近强国影响提早立的国("受大昌影响,李昭建平国")
       const mentor = e.b >= 0 && polityOf(civ, e.a)?.mentor === e.b ? e.b : -1;
       if (mentor >= 0) head = `受${pn(civ, mentor, y)}影响,${head}`;
+      // 教国(疆土与封建,politics.ts):在大教圣城立的国
+      const theoF = polityOf(civ, e.a)?.theocracy;
+      if (e.cause === 'theocracy' && theoF !== undefined) head = `${civ.religion?.faiths?.[theoF]?.name ?? '大教'}信众奉圣城${where}立教国,号${pn(civ, e.a, y)}`;
       // 合众立国(疆土与封建,politics.ts):无主大城带上邻近同族的几城一起立国
       if (e.cause === 'league' && (e.n ?? 0) > 0) head = `${where}等${cnNumber((e.n ?? 0) + 1)}城合众立国,号${pn(civ, e.a, y)}`;
       return withPeople(base(e, id, `${head}${where ? `,都于${where}` : ''}`, imp, mentor >= 0 ? [e.a, mentor] : [e.a], [e.region]), who?.rise === 'found' ? who : null);
@@ -1985,6 +1992,9 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
         const back = host >= 0 && host !== e.b ? `自${pn(civ, host, y)}还,` : '';
         const head = `故${(fallen.name && polityRootAt(fallen, fallen.ended ?? y)) || '国'}${folk}${back}${r ? `据${r}` : ''}`;
         t = e.b >= 0 ? `${head}起兵,脱${pn(civ, e.b, y)}复国,号${A}` : `${head}复国,号${A}`;
+      } else if (e.cause === 'theocracy') {
+        const tf = P?.theocracy;
+        t = `${pn(civ, e.b, y)}以圣城${r || ''}归${tf !== undefined ? civ.religion?.faiths?.[tf]?.name ?? '教团' : '教团'},立为教国,号${A}`;
       } else if (e.cause === 'enfeoff') {
         // 分封(疆土与封建,politics.ts):"大渭疆土广远,难以尽治,以瑞州等地分封李昭,号瑞国"
         t = `${pn(civ, e.b, y)}疆土广远,难以尽治,以${r ? `${r}等地` : '边地'}分封${who ? who.name : '宗室'},号${A}`;
@@ -2469,7 +2479,14 @@ function diplomacyEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       return base(e, id, t, 1, [e.a, e.b], [], '绝');
     }
     case 'submit': {
-      const t = e.cause === 'enfeoff' ? `${A}受封于${B},世为藩屏,岁岁朝贡` : `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
+      // 同一宗主下改档:朝贡升藩属、藩属降朝贡(疆土与封建)
+      const prevS = (() => { for (let k = id - 1; k >= 0; k--) { const n = civ.annals[k]; if ((n.kind === 'submit' || n.kind === 'defect') && n.a === e.a) return n; } return undefined; })();
+      const same = prevS?.kind === 'submit' && prevS.b === e.b;
+      const t = e.cause === 'enfeoff' ? `${A}受封于${B},世为藩屏,岁岁朝贡`
+        : same && e.cause === 'tribute' ? `${A}渐强,不复以藩臣事${B},仅岁时朝贡`
+        : same ? `${A}朝贡${B}日久,遂称藩臣,听其号令`
+        : e.cause === 'tribute' ? `${A}遣使朝贡于${B},奉为上国`
+        : `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
       const P = polityOf(civ, e.a);
       return base(e, id, t, P && polityTierAt(P, y) >= GREAT_TIER ? 3 : 2, [e.a, e.b], [e.region]);
     }

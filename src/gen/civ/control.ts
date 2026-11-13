@@ -493,7 +493,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
         if (!dm.liege.has(v) || !(pm.size[v] > 0)) continue;
         const l = dm.liegeOf(v);
         if (l < 0 || l >= NP) continue;
-        const x = TRIBUTE * rev[v];
+        const x = TRIBUTE * rev[v] * (dm.tribute.has(v) ? tradeK.TRIB_RATE : 1);
         paid[v] += x;
         got[l] += x;
       }

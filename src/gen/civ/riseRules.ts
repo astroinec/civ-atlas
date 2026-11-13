@@ -130,6 +130,47 @@ export const RISE_KNOBS = defineKnobs('rise', {
   WEARY_NET: 1,
   WEARY_DECLARE: 0.5,
   WEARY_LEN: 0.7,
+  /**
+   * ⑥ 宗藩分档(diplomacy.ts):朝贡 = 名义尊奉、岁贡减半,内政外交自主、可另结盟,断贡容易、宗主不一定讨伐、不会被纳土;
+   *    藩属 = 原来的称臣(随宗主、不另结盟、宗主援救、久了可能纳土)。
+   *    畏强邻主动称臣、被宣战当场称臣:强邻国力是自己 TRIB_RATIO 倍以上即可,只称朝贡;
+   *    战败称臣:宗主的藩属不到能管的个数(VASSAL_BASE + 行政能力 × VASSAL_PER)才收为藩属,超出了只收朝贡;分封出来的照旧是藩属。
+   *    朝贡满 UPGRADE_AGE 年、接壤、宗主国力是它 SUBMIT_RATIO 倍以上:每次看邦交有 UPGRADE_P 的机会升为藩属(宗主还管得过来时);
+   *    藩属国力追到宗主的 DOWN_RATIO:有 DOWN_P 的机会降为朝贡(不必先打一仗)。
+   *    朝贡国断贡:满 TRIB_DEFECT_MIN 年就可能,赔率 × TRIB_DEFECT_MUL;断贡后宗主讨伐的机会 × TRIB_PUNISH
+   */
+  TRIB_RATIO: 2,
+  TRIB_RATE: 0.5,
+  VASSAL_BASE: 1,
+  VASSAL_PER: 0.5,
+  UPGRADE_AGE: 60,
+  UPGRADE_P: 0.2,
+  DOWN_RATIO: 0.5,
+  DOWN_P: 0.5,
+  TRIB_DEFECT_MIN: 10,
+  TRIB_DEFECT_MUL: 3,
+  TRIB_PUNISH: 0.3,
+  /**
+   * ⑦ 合纵(diplomacy.ts):最怕的强邻国力是自己 COALITION_RATIO 倍以上时先找盟友、后才考虑朝贡;
+   *    同样挨着它的国家当盟友分数 × COALITION_SCORE,结成的赔率 × COALITION_ODDS;有了盟友再朝贡的机会 × COALITION_SUBMIT
+   */
+  COALITION_RATIO: 2.5,
+  COALITION_SCORE: 2,
+  COALITION_ODDS: 1.5,
+  COALITION_SUBMIT: 0.3,
+  /**
+   * ⑧ 政教(diplomacy.ts、wars.ts、politics.ts、religion.ts):
+   *    同奉一个大教的两国结盟分数 × FAITH_PACT;向同教之国宣战 × FAITH_PEACE;两国各奉不同大教、攻方的教是大教(THEO_STATES 国以上奉为国教)时 × FAITH_WAR;
+   *    教国:大教(THEO_STATES 国以上奉为国教)的圣城不在同教之国的国都:每次看部落地带有 THEO_P 的机会在圣城立教国(无主就立国,同教之国的非国都州就分出去,
+   *    异教之国手里的不立);教国永奉本教,同教之国向它宣战 × THEO_SAFE,它挨打时挨着攻方的同教之国有 THEO_RESCUE 的机会发兵护教
+   */
+  FAITH_PACT: 1.5,
+  FAITH_PEACE: 0.6,
+  FAITH_WAR: 1.3,
+  THEO_STATES: 4,
+  THEO_P: 0.5,
+  THEO_SAFE: 0.15,
+  THEO_RESCUE: 0.5,
   /** 海拔(米)≥ 这几档时守方的倍数 */
   TERRAIN_ELEV: [600, 1000, 1600],
   TERRAIN_ELEV_DEF: [1.1, 1.2, 1.35],

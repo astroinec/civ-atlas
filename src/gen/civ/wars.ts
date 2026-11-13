@@ -105,6 +105,7 @@ import { Ev } from './events';
 import { civApi } from './api';
 import { defineKnobs } from './engine/knobs';
 import { mulOf } from './influence';
+import { faithSimOf } from './religion';
 
 // ---- 调参(以截图和统计数为准,见 scripts/gen-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -632,6 +633,27 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     return qt;
   };
 
+  /** 政教(疆土与封建):p 的国教所属大教(没有 / 民间信仰 = −1);奉大教 f 为国教的在世国家数 */
+  const faithRootOf = (p: number): number => {
+    const fs = faithSimOf(sim);
+    if (!fs) return -1;
+    const f = fs.stateFaith(p);
+    return f >= 0 && !fs.folk(f) ? fs.rootOf(f) : -1;
+  };
+  /** 圣都之国(疆土与封建):以大教圣城为国都、奉这个大教的国家(政教合一);是 = 大教编号,不是 = −1 */
+  const holySeat = (q: number): number => {
+    const fs = faithSimOf(sim);
+    const f = faithRootOf(q);
+    if (!fs || f < 0) return -1;
+    const F = fs.list[f];
+    return F && F.holy !== undefined && capitalAt(pm.polities[q], sim.now) === F.holy && faithStates(f) >= riseK.THEO_STATES ? f : -1;
+  };
+  api.war.holySeat = holySeat;
+  const faithStates = (f: number): number => {
+    let n = 0;
+    for (const P of pm.polities) if (P.ended === undefined && pm.size[P.id] > 0 && faithRootOf(P.id) === f) n++;
+    return n;
+  };
   /** 厌战(疆土与封建):p、q 两国近 WEARY_YEARS 年里打完的仗有几场(不算 skip 这场);彼此净得失超过 WEARY_NET 州(不是拉锯)= 0 */
   const seesaw = (p: number, q: number, t: number, skip: number): number => {
     let n = 0;
@@ -876,6 +898,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     let target = -1;
     let odds = 0;
     let traitor = false;
+    // 政教(疆土与封建):攻方国教所属大教、它是不是大教(THEO_STATES 国以上奉为国教)
+    const fp = t >= riseK.FROM7 ? faithRootOf(p) : -1;
+    const fpGreat = fp >= 0 && faithStates(fp) >= riseK.THEO_STATES;
     let breaker = false;
     /** 挑中的那一国:边境上有本国缺的哪几样物产 */
     let covet = 0;
@@ -932,6 +957,12 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (pol && picks(pm, pol.foes, q)) o *= FOE_ODDS;
       // 疆土与封建(riseRules.ts 第七批):管不过来的大国少扩张(超出能稳管的州数越多,宣战越少);立国不满 SUBMIT_GRACE 年的国家也少挨打
       if (t >= riseK.FROM7) {
+        // 政教:同教相亲、异教相仇;同教之国不轻易打教国
+        const fq = faithRootOf(q);
+        if (fp >= 0 && fq >= 0) {
+          if (fp === fq) o *= Q.theocracy === fp || holySeat(q) === fp ? riseK.THEO_SAFE : riseK.FAITH_PEACE;
+          else if (fpGreat) o *= riseK.FAITH_WAR;
+        }
         const wn = seesaw(p, q, t, -1);
         if (wn >= 2) o *= fpow(riseK.WEARY_DECLARE, wn - 1);
         const gov = api.politics.governable?.(p, t) ?? Infinity;
