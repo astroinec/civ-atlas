@@ -1086,8 +1086,8 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
             if (owner[j] >= 0 || culture[j] !== culture[r] || c < 0 || pm.settlements[c].ended !== undefined || populationAt(pm.settlements[c], t) < rk.FED_POP || api.polity.closed?.(j, -1, t)) continue;
             fed.push(j);
           }
-          for (const j of fed) sim.setOwner(Layer.Polity, j, p.id, Ev.PolityFound);
         }
+        for (const j of fed) sim.setOwner(Layer.Polity, j, p.id, Ev.PolityFound);
         const base0 = bm >= 0 ? { a: p.id, b: bm, region: r, settlement: s.id } : { a: p.id, region: r, settlement: s.id };
         sim.record('found', fed.length ? { ...base0, cause: 'league', n: fed.length } : base0);
         capsNow()[r] = 1;
