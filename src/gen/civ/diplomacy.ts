@@ -1,3 +1,4 @@
+import { Cap, CAP_COUNT, devModelOf } from './development';
 /**
  * 邦交:称臣纳贡(藩属)、结盟、背盟。挂在同一个推演引擎(sim.ts)上;只记史事、改规则,不改归属
  * (宗主收藩属的国土走合并,原因 Ev.Merge,和 politics.ts 的合并一样)。
@@ -615,14 +616,28 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const d = pm.capDist[p];
     for (const Z of pm.polities) {
       if (!Z || Z.id === p || Z.ended !== undefined) continue;
-      if (d[capRegion(Z.id, t)] <= riseK.PACT_RANGE) out.add(Z.id);
+      if (t >= riseK.FROM9 ? reach9(p, Z.id, t) : d[capRegion(Z.id, t)] <= riseK.PACT_RANGE) out.add(Z.id);
     }
     return [...out].sort((x, y) => x - y);
+  };
+  /**
+   * 盟约看交通(riseRules.ts 第九批):两国国都之间的路程(两头走取近的)不超过 ALLY_BASE + ALLY_PER × 两国国都交通能力的平均,
+   * 才结得成盟;接壤的总结得成
+   */
+  const reach9 = (p: number, z: number, t: number): boolean => {
+    if (borders(p, z)) return true;
+    const cp = capRegion(p, t), cz = capRegion(z, t);
+    const d = Math.min(pm.capDist[p][cz], pm.capDist[z][cp]);
+    if (!Number.isFinite(d)) return false;
+    const dv = devModelOf(sim);
+    const tr = dv ? (dv.cur[cp * CAP_COUNT + Cap.Transport] + dv.cur[cz * CAP_COUNT + Cap.Transport]) / 2 : 0;
+    return d <= riseK.ALLY_BASE + riseK.ALLY_PER * (Number.isFinite(tr) ? tr : 0);
   };
   const tryPact = (p: number, f: number, ratio: number, k: number, t: number): boolean => {
     // 自由结盟(规则项 split.pactFrom;riseRules.ts):没生效 = 下面每一步都和原来逐位一样
     const free = t >= riseK.FROM4;
-    const maxPacts = free ? riseK.PACT_MAX : MAX_PACTS;
+    // 盟约看交通(第九批):盟约不设上限
+    const maxPacts = t >= riseK.FROM9 ? Infinity : free ? riseK.PACT_MAX : MAX_PACTS;
     const rest = free ? riseK.PACT_REST : PACT_REST;
     if (dm.alliesOf(p).length >= maxPacts) return false;
     const pf = powerOf(f, t);
@@ -638,6 +653,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       for (const z of around(p, t)) if (!cands.includes(z)) cands.push(z);
     }
     for (const z of cands) {
+      if (t >= riseK.FROM9 && !reach9(p, z, t)) continue;
       if (z === p || z === f || (dm.liegeOf(z) >= 0 && !dm.tribute.has(z)) || dm.liegeOf(z) === f || friendly(z, f, t) || friendly(z, p, t) || fighting(z, p)) continue;
       if (dm.alliesOf(z).length >= maxPacts || t - (dm.broken.get(pairKey(p, z)) ?? -Infinity) < rest) continue;
       if (pm.policies.size && (picks(pm, pol?.foes, z) || hates(pm, z, p, t))) continue;
@@ -695,7 +711,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     if (t < riseK.FROM8 || ratio < riseK.BLOC_RATIO || !free8(p, f, t)) return false;
     const pf = powerOf(f, t);
     // 同样挨着 f、同样弱得多的小国(不必彼此接壤;先挨着 p 的,再按编号)
-    const ok = (z: number) => free8(z, f, t) && pf >= riseK.BLOC_RATIO * powerOf(z, t) && !friendly(z, f, t) && !fighting(z, p);
+    const ok = (z: number) => free8(z, f, t) && pf >= riseK.BLOC_RATIO * powerOf(z, t) && !friendly(z, f, t) && !fighting(z, p) && (t < riseK.FROM9 || reach9(p, z, t));
     const near = new Set(neighbors(p));
     const cands = neighbors(f).filter((z) => z !== p && ok(z)).sort((u, v) => (near.has(v) ? 1 : 0) - (near.has(u) ? 1 : 0) || u - v);
     const group = [p, ...cands].slice(0, riseK.BLOC_MAX);
@@ -727,7 +743,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       return true;
     }
     // 邦联:两两结盟(每国的盟约不超过上限的才拉进来),第一条记盟主和几国
-    const room = (z: number) => riseK.PACT_MAX - dm.alliesOf(z).length;
+    const room = (z: number) => (t >= riseK.FROM9 ? Infinity : riseK.PACT_MAX - dm.alliesOf(z).length);
     const members = group.filter((z) => room(z) >= group.length - 1 || z === p);
     if (members.length < riseK.BLOC_MIN) return false;
     const sid = capitalAt(pm.polities[p], t);

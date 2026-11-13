@@ -198,6 +198,7 @@ add(
   num({ id: 'split.devLeanFrom', name: '发展倾向起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.realmFrom', name: '疆土与封建起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.judgeFrom', name: '审势与立国起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
+  num({ id: 'split.allyFrom', name: '盟约看交通起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.age', name: '王朝老了人心渐散' }, { official: 0.6, min: 0, max: 2, step: 0.1, unit: '' }),
 );
 
