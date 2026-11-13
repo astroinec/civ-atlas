@@ -48,7 +48,7 @@ import { YEAR_TICKS, resolveKey } from '../edits';
 import { Layer, type Annal, type Civ, type Year } from './types';
 import { fpow, keyed, keyed4, subSeed } from './engine/rand';
 import { bookChain, quantize, type CivSim } from './engine/sim';
-import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, powerScaleOf, type PolityModel } from './polities';
+import { addPolity, befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, powerScaleOf, type PolityModel } from './polities';
 import { POLICY_KNOBS } from './policy';
 import { MARRIAGES_KNOBS } from './marriages';
 import { polityBorders, polityReach, warModelOf, type War, type WarModel } from './wars';
@@ -163,6 +163,9 @@ const U_SUE = 10;
 const U_DECLARE_SUBMIT = 11;
 const U_TIER = 12;
 const U_THEO = 13;
+const U_BLOC = 14;
+const U_FEDERAL = 15;
+const U_FED_SPLIT = 16;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -178,6 +181,8 @@ export interface Pact {
   since: Year;
   /** 共御的强邻(−1 = 没有) */
   foe: number;
+  /** 邦联之盟(审势与立国):一方挨打,其余必定援救 */
+  league?: boolean;
 }
 
 const pairKey = (a: number, b: number) => Math.min(a, b) * 32768 + Math.max(a, b);
@@ -289,7 +294,7 @@ export class DiplomacyModel {
 
   /** 按一条史事更新(推演里记完史事就调;接着推时按史事重放) */
   apply(e: Annal): void {
-    if (e.kind === 'alliance') this.pacts.push({ a: e.a, b: e.b, since: e.year, foe: e.foe ?? -1 });
+    if (e.kind === 'alliance') this.pacts.push({ a: e.a, b: e.b, since: e.year, foe: e.foe ?? -1, ...(e.cause === 'league' ? { league: true } : {}) });
     else if (e.kind === 'unally') {
       const x = this.pacts.find((v) => (v.a === e.a && v.b === e.b) || (v.a === e.b && v.b === e.a));
       if (x) this.drop(x, e.year);
@@ -560,7 +565,8 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     if (ratio < (realm(t) ? riseK7.TRIB_RATIO : SUBMIT_RATIO) || pm.size[p] > SUBMIT_MAX || fighting(p, q) || dm.vassalsOf(p).length || fightsBloc(p, q)) return false;
     // 疆土与封建(riseRules.ts 第七批):立国不满 SUBMIT_GRACE 年的国家不主动称臣
     const rk7 = pm.knobs.get(RISE_KNOBS);
-    if (t >= rk7.FROM7 && t - pm.polities[p].founded < rk7.SUBMIT_GRACE) return false;
+    // 审势与立国(第八批):这条只挡藩属,朝贡不挡(主动称臣在疆土与封建下本就只是朝贡)
+    if (t >= rk7.FROM7 && t < rk7.FROM8 && t - pm.polities[p].founded < rk7.SUBMIT_GRACE) return false;
     const d = dm.defected.get(p);
     if (d && d.liege === q && t - d.year < RESUBMIT_REST) return false;
     // 有限竞争之约(treaties.ts):不收约国的藩属
@@ -653,6 +659,82 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     return [best, bestRatio];
   };
 
+  // ---- 审势与立国(riseRules.ts 第八批):小国结邦(联邦 / 邦联)、联邦分立 ----
+  /** 能结邦的小国:不在和 f 以外的国家打仗(正挨 f 打的照样能结邦联) */
+  const free8 = (z: number, f: number, t: number) =>
+    alive(z) && pm.size[z] > 0 && pm.size[z] <= riseK.BLOC_SIZE && warsOf(z).every((w) => w.a === f || w.b === f) && !halted(z, t) && !wm.iv?.protects(z, t) && !wm.iv?.holdsLock(z, t)
+    && !dm.vassalsOf(z).length && (dm.liegeOf(z) < 0 || (dm.tribute.has(z) && dm.liegeOf(z) !== f)) && !pm.polities[z].federal;
+  const tryBloc = (p: number, f: number, ratio: number, k: number, t: number): boolean => {
+    if (t < riseK.FROM8 || ratio < riseK.BLOC_RATIO || !free8(p, f, t)) return false;
+    const pf = powerOf(f, t);
+    // 同样挨着 f、同样弱得多的小国(不必彼此接壤;先挨着 p 的,再按编号)
+    const ok = (z: number) => free8(z, f, t) && pf >= riseK.BLOC_RATIO * powerOf(z, t) && !friendly(z, f, t) && !fighting(z, p);
+    const near = new Set(neighbors(p));
+    const cands = neighbors(f).filter((z) => z !== p && ok(z)).sort((u, v) => (near.has(v) ? 1 : 0) - (near.has(u) ? 1 : 0) || u - v);
+    const group = [p, ...cands].slice(0, riseK.BLOC_MAX);
+    if (group.length < riseK.BLOC_MIN) return false;
+    if (keyed(dm.base, pm.ptag[p], k, U_BLOC) >= riseK.BLOC_P) return false;
+    const cu = pm.polities[p].culture;
+    // 同族的那几国(都挨着同一个强邻,彼此相去不远;不必接壤,联邦可以有飞地)
+    const kin = group.filter((z) => pm.polities[z].culture === cu);
+    if (kin.length >= riseK.FED_MIN && kin.every((z) => !atWar(z)) && keyed(dm.base, pm.ptag[p], k, U_FEDERAL) < riseK.FEDERAL_P) {
+      // 联邦:人口最多的那国国都做国都
+      let cap = -1;
+      let best = -1;
+      for (const z of kin) {
+        const sid = capitalAt(pm.polities[z], t);
+        const v = populationAt(pm.settlements[sid], t);
+        if (v > best || (v === best && sid < cap)) { best = v; cap = sid; }
+      }
+      const parts = kin.map((z) => ({ cap: capitalAt(pm.polities[z], t), regions: pm.lands[z].slice() }));
+      const U = addPolity(pm, cap, cu, t, { federal: { foe: f, parts }, lineage: 'republic' });
+      const capR = pm.settlements[cap].region;
+      sim.setOwner(Layer.Polity, capR, U.id, Ev.PolityFound);
+      for (const part of parts) for (const r of part.regions) if (r !== capR) sim.setOwner(Layer.Polity, r, U.id, Ev.Merge);
+      for (const z of kin) {
+        endPolity(pm, z, t);
+        pol?.merged.add(z);
+      }
+      sim.record('found', { a: U.id, b: f, region: capR, settlement: cap, cause: 'federation', n: kin.length });
+      for (const z of kin) sim.record('merge', { a: U.id, b: z, cause: 'federation' });
+      return true;
+    }
+    // 邦联:两两结盟(每国的盟约不超过上限的才拉进来),第一条记盟主和几国
+    const room = (z: number) => riseK.PACT_MAX - dm.alliesOf(z).length;
+    const members = group.filter((z) => room(z) >= group.length - 1 || z === p);
+    if (members.length < riseK.BLOC_MIN) return false;
+    const sid = capitalAt(pm.polities[p], t);
+    let first = true;
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const a = members[i], b = members[j];
+        const old = dm.pactOf(a, b);
+        if (old) record('unally', { a, b, cause: 'lapse' });
+        record('alliance', { a, b, region: pm.settlements[sid].region, settlement: sid, foe: f, cause: 'league', ...(first ? { n: members.length } : {}) });
+        first = false;
+      }
+    }
+    return true;
+  };
+  /** 联邦外患没了:有一邦重新分立(按合邦时的那一份;国都那一份不分) */
+  const tryFedSplit = (p: number, k: number, t: number): boolean => {
+    const F = pm.polities[p].federal;
+    if (!F || t < riseK.FROM8 || t - pm.polities[p].founded < riseK.FED_HOLD || atWar(p) || halted(p, t)) return false;
+    if (alive(F.foe) && powerOf(F.foe, t) >= riseK.FED_SAFE * powerOf(p, t)) return false;
+    if (keyed(dm.base, pm.ptag[p], k, U_FED_SPLIT) >= riseK.FED_SPLIT_P) return false;
+    const capNow = capitalAt(pm.polities[p], t);
+    let pick: { cap: number; held: number[] } | null = null;
+    for (const part of F.parts) {
+      const s = pm.settlements[part.cap];
+      if (part.cap === capNow || !s || s.ended !== undefined || owner[s.region] !== p) continue;
+      const held = part.regions.filter((r) => owner[r] === p && r !== capRegion(p, t));
+      if (held.length && held.length < pm.size[p] && (!pick || held.length > pick.held.length)) pick = { cap: part.cap, held };
+    }
+    if (!pick || !api.politics.secede) return false;
+    api.politics.secede(p, pick.held, pick.cap, pm.settlements[pick.cap].region, t, 'split', 'federation');
+    return true;
+  };
+
   sim.on(Ev.DiplomacyCheck, (k, p, t) => {
     powMemo.clear();
     const P = pm.polities[p];
@@ -672,9 +754,12 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       if (tryDefect(p, L, k, t) || tryUpgrade(p, L, k, t)) return;
     }
     for (const v of dm.vassalsOf(p)) if (tryAbsorb(p, v, k, t)) return;
+    if (tryFedSplit(p, k, t)) return;
     for (const x of dm.pactsOf(p)) if (tryLapse(x, p, k, t)) return;
     const pp = powerOf(p, t);
     const [f, ratio] = mainThreat(p, t, pp);
+    // 审势与立国:强邻强得多、四周又有同病相怜的小国,先结邦(联邦 / 邦联)
+    if (f >= 0 && tryBloc(p, f, ratio, k, t)) return;
     // 合纵(疆土与封建):强邻强得多时先找盟友,找不到才朝贡
     if (f >= 0 && realm(t) && ratio >= riseK7.COALITION_RATIO) {
       if (tryPact(p, f, ratio, k, t) || trySubmit(p, f, ratio, k, t)) return;
@@ -703,7 +788,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     // 新立国规则(riseRules.ts):被强得多的邻国宣战,小国可以当场遣使称臣、攻方受降罢兵
     // 肯不肯看守方在位君主(好战越低越肯,rulers.ts)、同族异族、离攻方国都远近(远的攻方更肯受降);有分量的盟国撑腰就不降
     const rk = pm.knobs.get(RISE_KNOBS);
-    const young = t >= rk.FROM7 && t - pm.polities[y].founded < rk.SUBMIT_GRACE; // 疆土与封建:新国被宣战也不当场称臣
+    const young = t >= rk.FROM7 && t < rk.FROM8 && t - pm.polities[y].founded < rk.SUBMIT_GRACE; // 疆土与封建:新国被宣战也不当场称臣(审势与立国起可以当场朝贡)
     if (t >= rk.FROM && !young && dm.liegeOf(y) < 0 && dm.liegeOf(x) < 0 && !dm.vassalsOf(y).length && pm.size[y] <= SUBMIT_MAX && !api.war.revolt?.(w) && !halted(x, t)) {
       powMemo.clear();
       const px = powerOf(x, t), py = powerOf(y, t);
@@ -726,7 +811,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       // 不接壤的:新立国规则下可以借道(riseRules.ts),机会打折;借不到道的不算坐视不救
       const near = borders(z, x);
       if (!near && !(t >= rk.FROM2 && reach(z, x, y, t))) continue;
-      let join = hates(pm, z, y, t) ? 0 : befriends(pm, z, y, t) ? FRIEND_JOIN : PACT_JOIN;
+      let join = hates(pm, z, y, t) ? 0 : dm.pactOf(z, y)?.league ? 1 : befriends(pm, z, y, t) ? FRIEND_JOIN : PACT_JOIN;
       if (!near) join *= rk.FAR_JOIN;
       // 结着亲的更肯出兵(marriage.ts)
       if (join > 0 && api.diplomacy.bond) join *= 1 + (KIN_JOIN - 1) * api.diplomacy.bond(z, y, t);

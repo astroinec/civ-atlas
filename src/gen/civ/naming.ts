@@ -517,6 +517,8 @@ export function namePolities(seed: number, polities: Polity[], cultures: Culture
         seen.add(cu.id);
         p.name = cu.name;
       } else p.name = fresh(p);
+      // 联邦(审势与立国,diplomacy.ts):国号"某某联邦"(各档都不再接部 / 国,见 growth.ts 的 titlesOf)
+      if (p.federal && !p.name.endsWith('联邦')) p.name = fresh(p) + '联邦';
       claim(p.name);
     } else if (kind === 0) claim(p.name);
     if (p.dynasties?.[i]) dyn(p, i, styleOf(p), taken, takenBare);

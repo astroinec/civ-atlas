@@ -1935,6 +1935,12 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       if (e.cause === 'theocracy' && theoF !== undefined) head = `${civ.religion?.faiths?.[theoF]?.name ?? '大教'}信众奉圣城${where}立教国,号${pn(civ, e.a, y)}`;
       // 合众立国(疆土与封建,politics.ts):无主大城带上邻近同族的几城一起立国
       if (e.cause === 'league' && (e.n ?? 0) > 0) head = `${where}等${cnNumber((e.n ?? 0) + 1)}城合众立国,号${pn(civ, e.a, y)}`;
+      // 联邦(审势与立国,diplomacy.ts):几个同族小国畏强邻合为一邦
+      if (e.cause === 'federation') {
+        const ms = civ.annals.filter((x) => x.kind === 'merge' && x.cause === 'federation' && x.a === e.a && x.year === e.year).map((x) => pn(civ, x.b, y));
+        head = `${ms.join('、')}${cnNumber(ms.length)}邦${e.b >= 0 ? `畏${pn(civ, e.b, y)}之强,` : ''}会盟合为一邦,号${pn(civ, e.a, y)}`;
+        return withPeople(base(e, id, `${head}${where ? `,都于${where}` : ''}`, 3, [e.a, e.b], [e.region]), null);
+      }
       return withPeople(base(e, id, `${head}${where ? `,都于${where}` : ''}`, imp, mentor >= 0 ? [e.a, mentor] : [e.a], [e.region]), who?.rise === 'found' ? who : null);
     }
     case 'rank':
@@ -2043,6 +2049,7 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     case 'merge': {
       // 并掉的是大国才是大事
       // 藩属纳土归附宗主(diplomacy.ts)
+      if (e.cause === 'federation') return base(e, id, `${pn(civ, e.b, y)}并入${pn(civ, e.a, y)}`, 1, [e.a, e.b], []);
       const t = e.b < 0 ? `${pn(civ, e.a, y)}并吞邻邦` : e.cause === 'vassal' ? `${pn(civ, e.b, y)}纳土归附${pn(civ, e.a, y)}` : `${pn(civ, e.b, y)}并入${pn(civ, e.a, y)}`;
       return base(e, id, t, isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], []);
     }
@@ -2458,6 +2465,15 @@ function diplomacyEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       const F = polityOf(civ, f);
       // 结亲以后结的盟(两国还结着亲):"(两国本为姻亲)"
       const kin = kinAt(civ, e.a, e.b, y, true) >= 0 ? '(两国本为姻亲)' : '';
+      // 邦联(审势与立国,diplomacy.ts):几国两两结盟,第一条(n = 几国)写会盟,其余的只在"全部"里
+      if (e.cause === 'league') {
+        if (!(e.n ?? 0)) return { ...base(e, id, `${A}与${B}同在邦联`, 1, [e.a, e.b], []), settlement: -1 };
+        const ms = new Set<number>();
+        for (const x of civ.annals) if (x.kind === 'alliance' && x.cause === 'league' && x.year === e.year && (x.foe ?? -1) === f) { ms.add(x.a); ms.add(x.b); }
+        const names = [...ms].sort((u, v) => (u === e.a ? -1 : v === e.a ? 1 : u - v)).map((q) => pn(civ, q, y));
+        const t2 = `${names.join('、')}${cnNumber(names.length)}国会盟,结为邦联${F ? `,共御${pn(civ, f, y)}` : ''};一国有难,诸国共救`;
+        return { ...base(e, id, t2, 3, [...ms, f], []), settlement: -1 };
+      }
       const t = (F ? `${A}与${B}结盟,共御${pn(civ, f, y)}` : `${A}与${B}结盟`) + kin;
       return { ...base(e, id, t, minTier(civ, e.a, e.b, y) >= TITAN_TIER ? 3 : 2, [e.a, e.b, f], []), settlement: -1 };
     }

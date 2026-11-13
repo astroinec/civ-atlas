@@ -207,4 +207,23 @@ export const RISE_KNOBS = defineKnobs('rise', {
   FED8_POP: 3,
   LATE_ERA: 5,
   LATE_ADD: 2,
+  /**
+   *   ③ 朝贡不受新国称臣的年限(SUBMIT_GRACE 只挡藩属):新国从立国起就可以向强邻朝贡、被宣战时当场朝贡罢兵(diplomacy.ts)
+   *   ④ 小国结邦(diplomacy.ts):强邻国力是自己 BLOC_RATIO 倍以上的小国(不超过 BLOC_SIZE 州),和同样挨着这个强邻、同样弱得多的
+   *      小国(不必彼此接壤)凑够 BLOC_MIN 国(最多 BLOC_MAX 国)时,每次看邦交有 BLOC_P 的机会结邦:
+   *        - 联邦(正式合邦):其中同族、都没在打仗的有 FED_MIN 国以上时(不必接壤,可以有飞地),有 FEDERAL_P 的机会合成一国
+   *          ("某某联邦",国都在人口最多的那城;只合这几国,其余不入);
+   *        - 邦联(松散联盟):其余情形,两两结盟(共御强邻),一方挨打其余各方必定援救(借道的照旧打折);外患不足为患了照常渐废。
+   *      联邦立满 FED_HOLD 年、强邻已亡或国力不到联邦的 FED_SAFE 倍,每次看邦交有 FED_SPLIT_P 的机会有一邦重新分立
+   */
+  BLOC_RATIO: 3,
+  BLOC_SIZE: 3,
+  BLOC_MIN: 3,
+  BLOC_MAX: 5,
+  FED_MIN: 2,
+  BLOC_P: 0.35,
+  FEDERAL_P: 0.5,
+  FED_HOLD: 60,
+  FED_SAFE: 1.5,
+  FED_SPLIT_P: 0.2,
 });

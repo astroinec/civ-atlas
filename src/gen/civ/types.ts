@@ -290,6 +290,11 @@ export interface Polity {
   /** 教国(疆土与封建,politics.ts):在圣城立的、永奉这个大教(Faith 编号)的国家 */
   theocracy?: number;
   /**
+   * 联邦(审势与立国,diplomacy.ts):几个同族小国畏强邻 foe 合成的一邦;parts = 合邦时各邦的国都(城编号)和州,
+   * 外患没了以后各邦可能重新分立(按 parts 分出去)。国号起成"某某联邦"(naming.ts)
+   */
+  federal?: { foe: number; parts: { cap: number; regions: number[] }[] };
+  /**
    * 阶段 3 王朝更替(dynasty.ts;按年份排好序):第一条 = 立国那年,改朝换代一次往后加一条。没改朝换代过 = 不给。
    * - name:东方语感 = 这一朝的国名词根(大昌 → 大景:地图上的国名跟着年份变,全称仍按当年的国号档位写,见 growth.ts 的 polityName);
    *   西幻语感 = 王室的名字("卡诺",写作"卡诺王朝";国名不变)。推演时留空,推演结束后由起名(naming.ts)填;
@@ -494,7 +499,7 @@ export type AnnalKind =
  *   revolution:议立宪 / 废君谈崩、起兵的人打不进国都,据地自立为共和国(史事 split 的 cause,reform.ts;紧跟在那条 council 后面);
  *   surrender 强国打下国都,余下的州一并归降、亡国(破都纳降,wars.ts;fall 的 cause)
  */
-export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'enfeoff' | 'league' | 'tribute' | 'theocracy';
+export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'enfeoff' | 'league' | 'tribute' | 'theocracy' | 'federation';
 
 /**
  * 一条史事(阶段 3):推演里各事件处理函数用 CivSim.record 往 Civ.annals 里记,编年史(界面上的事件列表)只读它。
