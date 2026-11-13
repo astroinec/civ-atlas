@@ -93,7 +93,9 @@ export const RISE_KNOBS = defineKnobs('rise', {
    *      每次看内政有 FEUD_P × 2 × 超出的倍数(最多 1)的机会,把离国都最远的 FEUD_GROUP_MIN–FEUD_GROUP_MAX 州(不超过国土 FEUD_FRAC;
    *      在打仗时不封挨着敌国的州)分封出去立国,受封的国家向它称臣;分封以后 FEUD_REST 年内不再分封;
    *      超出能稳管州数的大国宣战赔率 × (能稳管 ÷ 州数)^OVER_WAR_EXP,新立的国家挨打 × YOUNG_PREY
-   *   ③ 无主大城立国更容易,还能合众(politics.ts):大城自立的门槛换成 BIG7_*;立国时把挨着的、同族、有城(人口过 FED_POP)的无主州一并带上,最多 FED_MAX 州
+   *   ③ 无主大城立国更容易,还能合众(politics.ts):人口过 BIG7_POP(千人)就行,不看城龄、人口上限和国都间距;立国时把挨着的、同族、有城(人口过 FED_POP)的无主州一并带上,最多 FED_MAX 州;
+   *      紧挨别国国都的大城先有 ABSORB_P 的机会被那国和平收编
+   *   ⑤ 厌战(wars.ts):同一对国家来回拉锯、得失相抵的仗,打得越多越不想再打、打起来也越早议和
    *   ④ 州自身的地形(wars.ts):守方按那州的平均海拔、地貌再乘 TERRAIN_*;游牧国攻打山地、林地、湿地 × NOMAD_ROUGH,攻打草原、荒漠 × NOMAD_OPEN
    */
   FROM7: 65535,
@@ -107,13 +109,27 @@ export const RISE_KNOBS = defineKnobs('rise', {
   FEUD_GROUP_MAX: 4,
   FEUD_FRAC: 0.2,
   FEUD_REST: 60,
-  BIG7_CAP: 30,
+  BIG7_CAP: 0,
   BIG7_POP: 10,
-  BIG7_AGE: 150,
+  BIG7_AGE: 0,
   BIG7_P: 0.5,
   BIG7_MAX: 6,
   FED_POP: 8,
   FED_MAX: 3,
+  /**
+   * 无主大城不看国都间距;紧挨着在世国家国都(陆上 1 跳)的,每次看部落地带先有 ABSORB_P 的机会被那一国和平收编(纳入版图),
+   * 没收编的照样可以自立。人口 ≥ ABSORB_POP 的城才收编(小村落不值得)
+   */
+  ABSORB_P: 0.35,
+  ABSORB_POP: 5,
+  /**
+   * 厌战(wars.ts):两国近 WEARY_YEARS 年里已打过 n 场仗、彼此净得失不超过 WEARY_NET 州(拉锯)时,
+   * 再开战的赔率 × WEARY_DECLARE^n(两场起算),正在打的这场的年限 × WEARY_LEN^n(早些议和)
+   */
+  WEARY_YEARS: 80,
+  WEARY_NET: 1,
+  WEARY_DECLARE: 0.5,
+  WEARY_LEN: 0.7,
   /** 海拔(米)≥ 这几档时守方的倍数 */
   TERRAIN_ELEV: [600, 1000, 1600],
   TERRAIN_ELEV_DEF: [1.1, 1.2, 1.35],

@@ -632,6 +632,18 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     return qt;
   };
 
+  /** 厌战(疆土与封建):p、q 两国近 WEARY_YEARS 年里打完的仗有几场(不算 skip 这场);彼此净得失超过 WEARY_NET 州(不是拉锯)= 0 */
+  const seesaw = (p: number, q: number, t: number, skip: number): number => {
+    let n = 0;
+    let net = 0;
+    for (const v of wm.wars) {
+      if (v.id === skip || v.end === undefined || t - v.end >= riseK.WEARY_YEARS) continue;
+      if (!((v.a === p && v.b === q) || (v.a === q && v.b === p))) continue;
+      n++;
+      for (const e of v.takes) net += e.by === p ? 1 : e.by === q ? -1 : 0;
+    }
+    return Math.abs(net) <= riseK.WEARY_NET ? n : 0;
+  };
   /** 议和。extra = 罢兵割地:守方再割几州给攻方(见 CEDE;只有战役里议和时给) */
   const makePeace = (w: War, t: number, extra = 0) => {
     if (w.end !== undefined) return;
@@ -920,6 +932,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (pol && picks(pm, pol.foes, q)) o *= FOE_ODDS;
       // 疆土与封建(riseRules.ts 第七批):管不过来的大国少扩张(超出能稳管的州数越多,宣战越少);立国不满 SUBMIT_GRACE 年的国家也少挨打
       if (t >= riseK.FROM7) {
+        const wn = seesaw(p, q, t, -1);
+        if (wn >= 2) o *= fpow(riseK.WEARY_DECLARE, wn - 1);
         const gov = api.politics.governable?.(p, t) ?? Infinity;
         if (pm.size[p] > gov) o *= fpow(gov / pm.size[p], riseK.OVER_WAR_EXP);
         if (Q.parent === undefined && t - Q.founded < riseK.SUBMIT_GRACE) o *= riseK.YOUNG_PREY;
@@ -1161,7 +1175,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     const last = w.takes.length ? w.takes[w.takes.length - 1].year : w.start;
     // 攻方此刻在位的君主:越好战越不轻易罢兵、想多拿几州,好战低的打不了多久就想议和(rulers.ts;加上方针的胆量、和谈底线)
     const eff = effOf(pm, w.a, t);
-    const length = lengthOf(wm, w) * eff.war;
+    const length = lengthOf(wm, w) * eff.war * (t >= riseK.FROM7 ? fpow(riseK.WEARY_LEN, seesaw(w.a, w.b, t, w.id)) : 1);
     // 攻方国用不足到 BROKE_PEACE 以上、仗打过了年限的 BROKE_LENGTH:罢兵
     let peace = t - w.start >= length || t - last >= STALL || (t - w.start >= BROKE_LENGTH * length && (api.war.broke?.(w.a, t) ?? 0) >= BROKE_PEACE);
     /** 厌战、僵持、国用不足罢兵(攻方没达成目标):议和后两国可能顺带立约(treaties.ts) */

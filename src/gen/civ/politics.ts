@@ -212,6 +212,7 @@ const U_EDGE = 9;
 const U_BIG = 10;
 const U_VASSAL = 11;
 const U_FEUD = 12;
+const U_ABSORB = 13;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -938,8 +939,23 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       // 疆土与封建(riseRules.ts 第七批):门槛换成 BIG7_*,立国时带上挨着的同族有城的无主州(合众)
       const r7 = rise && t >= rk.FROM7;
       const [bCap, bPop, bAge, bP, bMax] = r7 ? [rk.BIG7_CAP, rk.BIG7_POP, rk.BIG7_AGE, rk.BIG7_P, rk.BIG7_MAX] : [BIG_CAP, BIG_POP, BIG_AGE, BIG_P, BIG_MAX];
+      // 紧挨别国国都的无主大城:先看那国要不要和平收编
+      if (r7 && populationAt(s, t) >= rk.ABSORB_POP) {
+        let host = -1;
+        for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1]; q++) {
+          if (reg.adjKind[q] === AdjKind.SeaRoute || reg.adjKind[q] === AdjKind.Strait) continue;
+          const o = owner[reg.adj[q]];
+          if (o >= 0 && pm.polities[o].ended === undefined && capRegion(o, t) === reg.adj[q] && (host < 0 || o < host)) host = o;
+        }
+        if (host >= 0 && keyed(pol.base, pm.stag[s.id], k, U_ABSORB) < rk.ABSORB_P) {
+          // 和平收编:和国家自然扩进无主州一样走 PolityArrive(不记史事;地图上那州归了那国)
+          sim.setOwner(Layer.Polity, r, host, Ev.PolityArrive);
+          capsNow();
+          continue;
+        }
+      }
       if (rise && (rush || bigDone < bMax) && capacityAt(s, t) >= bCap && populationAt(s, t) >= bPop && t - s.founded >= bAge
-        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < bP) && !nearCapital(r, BIG_SPACING * pm.spacing, capsNow())) {
+        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < bP) && (r7 || !nearCapital(r, BIG_SPACING * pm.spacing, capsNow()))) {
         const bm = mentorOf(r, t);
         const bnomad = pm.cultures[culture[r]].kind === 'nomad' || (bm >= 0 && pm.polities[bm].lineage === 'khanate');
         const p = addPolity(pm, s.id, culture[r], t, bm >= 0 ? (bnomad ? { mentor: bm } : { mentor: bm, lineage: pm.polities[bm].lineage }) : {});
