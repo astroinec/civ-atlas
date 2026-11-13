@@ -3231,7 +3231,7 @@ function lordText(civ: Civ, e: Annal): string {
 function fiscalText(civ: Civ, e: Annal, foes: number[]): string {
   const A = pn(civ, e.a, e.year);
   // 国用与国势(control.ts):入不敷出满几年,加派赋税
-  if (e.cause === 'arrears') return `${A}入不敷出已${cnNumber(e.n ?? 5)}年,加派赋税以济军需,民怨渐起`;
+  if (e.cause === 'arrears') return `${A}积欠军饷已${cnNumber(e.n ?? 5)}年,加派赋税以济军需,民怨渐起`;
   if (e.war === 0) return `${A}连年用兵,府库空竭`;
   if (foes.length) return `${A}用兵于${pn(civ, foes[0], e.year)},诸州又多截留赋税,府库空竭`;
   return `${A}诸州多截留赋税,府库空竭`;

@@ -243,7 +243,8 @@ export const RISE_KNOBS = defineKnobs('rise', {
   ALLY_PER: 4,
   /**
    * 第十批(国用与国势)从这一年起生效(规则项 split.fiscFrom);65535 = 不用。
-   * "入不敷出"= 国库空了还入不敷出(control.ts 的窘迫 > 0),连着几年(按账本里这一回窘迫起的那年算,第一年算 1):
+   * 积欠(fiscalBook.ts 的 ArrearsTracker):国库空了还入不敷出(control.ts 的窘迫 > 0)的每一年积欠加一年,收支相抵的每一年还掉半年,
+   * 下面的"年数"= 积欠的年数(向上取整;第一年算 1):
    *   ① 欠饷(wars.ts):打仗时本方兵力 × max(PAY_FLOOR, 1 − PAY_STEP × 年数)(第一年九五折、第二年九折、第三年八五折……);
    *      援盟(diplomacy.ts)的机会 × (1 − JOIN_BROKE × 窘迫):自己都养不起兵,少替人出兵
    *   ② 满 ARREARS_MID 年(control.ts):加派赋税,动荡 + ARREARS_U2(史事 fiscal,cause arrears);每年有 LORD2_P 的机会边将以欠饷拥兵割据;

@@ -63,7 +63,7 @@ import { NEVER } from './devTables';
 import { stateCards, type ControlRuleConsts, type FiscalRuleConsts, type StatePlug } from './stateTables';
 import type { TableCard } from './engine/tables';
 import { UNREST_KNOBS, unrestConsts, unrestInputs, unrestModelOf } from './unrest';
-import { BOOK_COLS, BOOK_WIDTH } from './fiscalBook';
+import { ArrearsTracker, BOOK_COLS, BOOK_WIDTH } from './fiscalBook';
 import { popConsts, POP_TABLES, POP_TILE_TABLES, cellsToTiles, popLayer, popTiles, spreadRural, tilesToCells } from './population';
 import { COUNCIL_RULES_KNOBS, councilConsts, cutDone, reorgCap } from './councilRules';
 import type { CivModule } from './modules';
@@ -717,26 +717,22 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
    * 国用与国势(riseRules.ts 第十批):入不敷出连着几年 —— 按账本(fiscalBook.ts)里这一回窘迫起的那一行算。
    * 账本每年记完扫一遍新记的行(接着推时从存档的账本从头扫,和一口气推下来的一样)
    */
-  const brokeSince = new Map<number, number>();
+  // 积欠(fiscalBook.ts 的 ArrearsTracker):入不敷出一年加一年,有结余一年还半年;不在入不敷出、积欠也会拖着
+  const arrears = new ArrearsTracker(riseK.FROM10);
   let bookScanned = 0;
   const scanBook = (): void => {
     const B = dev.book;
     if (B.years.length < bookScanned) {
-      brokeSince.clear();
+      arrears.clear();
       bookScanned = 0;
     }
-    for (let i = bookScanned; i < B.years.length; i++) {
-      const q = B.polities[i];
-      if (B.data[i * BOOK_WIDTH + BOOK_BROKE] > 0) {
-        if (!brokeSince.has(q)) brokeSince.set(q, B.years[i]);
-      } else brokeSince.delete(q);
-    }
+    for (let i = bookScanned; i < B.years.length; i++) arrears.feed(B.years[i], B.polities[i], B.data[i * BOOK_WIDTH + BOOK_BROKE] > 0);
     bookScanned = B.years.length;
   };
   const arrearsOf = (p: number, t: number): number => {
-    if (t < riseK.FROM10 || !(p < tBroke.length) || !(tBroke[p] > 0)) return 0;
-    const since = brokeSince.get(p);
-    return since === undefined ? 1 : Math.max(1, Math.floor(t) - since + 1);
+    if (t < riseK.FROM10 || !(pm.size[p] > 0)) return 0;
+    const d = arrears.value(p, t);
+    return d > 0 ? Math.ceil(d - 1e-9) : 0;
   };
   /** 欠饷加的动荡(加派赋税、兵民离心):没生效 = 0 */
   const arrearsU = (p: number, t: number): number => {
@@ -781,11 +777,11 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     }
     return true;
   };
-  /** 这一年(接着推时可能重算同一年)已记过加派那一笔 */
+  /** ARREARS_REST 年内(含这一年:接着推时可能重算同一年)已记过加派那一笔 */
   const notedArrears = (p: number, t: number): boolean => {
     for (let i = sim.annalCount - 1; i >= 0; i--) {
       const e = sim.annal(i);
-      if (e.year < t - 1) break;
+      if (e.year < t - riseK.ARREARS_REST) break;
       if (e.kind === 'fiscal' && e.cause === 'arrears' && e.a === p) return true;
     }
     return false;
@@ -800,7 +796,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
       if (n < riseK.ARREARS_MID) continue;
       const P = pm.polities[p];
       if (!P || P.ended !== undefined) continue;
-      if (n === riseK.ARREARS_MID && !notedArrears(p, t)) {
+      if (!notedArrears(p, t)) {
         const sid = capitalAt(P, t);
         sim.record('fiscal', { a: p, region: pm.settlements[sid].region, settlement: sid, war: 1, cause: 'arrears', n });
       }

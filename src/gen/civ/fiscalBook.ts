@@ -194,3 +194,43 @@ export function foesAt(civ: Pick<Civ, 'annals' | 'polities'>, p: number, year: Y
   }
   return out;
 }
+
+/**
+ * 积欠(国用与国势,riseRules.ts 第十批):按账本一行一行喂进来(年份不减),算各国此刻积欠了几年军饷。
+ * 从 from 年起:入不敷出(窘迫 > 0)的每一年积欠加 1;收支相抵的每一年还掉 REPAY 年(两年结余清一年),不低于 0。
+ * 账本每国只在档位、打几场仗变了(和每 BOOK_EVERY 年)才记一行,两行之间这国是不是入不敷出不变,所以由账本就能逐年推出来:
+ * 推演里每年喂新记的行,接着推时从存档的账本从头喂一遍,结果一样。
+ */
+export const ARREARS_REPAY = 0.5;
+export class ArrearsTracker {
+  /** 国家 → 上一行那年以前(不含)的积欠、上一行的年份、那一行起是否入不敷出 */
+  private st = new Map<number, { d: number; from: number; broke: boolean }>();
+  constructor(private start: number) {}
+  private at(s: { d: number; from: number; broke: boolean }, t: number): number {
+    const a = Math.max(s.from, this.start);
+    const n = Math.floor(t) - a + 1;
+    if (n <= 0) return s.d;
+    return s.broke ? s.d + n : Math.max(0, s.d - ARREARS_REPAY * n);
+  }
+  feed(year: number, p: number, broke: boolean): void {
+    const s = this.st.get(p);
+    const d = s ? this.at(s, year - 1) : 0;
+    this.st.set(p, { d, from: year, broke });
+  }
+  /** 第 t 年(含)为止积欠了几年(没有 = 0) */
+  value(p: number, t: number): number {
+    const s = this.st.get(p);
+    return s ? this.at(s, t) : 0;
+  }
+  clear(): void {
+    this.st.clear();
+  }
+}
+/** 由账本算国家 p 第 t 年的积欠(界面、外层用;from = 国用与国势起始年) */
+export function arrearsAt(book: FiscalBook | undefined, p: number, t: number, from: number): number {
+  if (!book) return 0;
+  const tr = new ArrearsTracker(from);
+  const K = BOOK_COLS.indexOf('窘迫');
+  for (let i = 0; i < book.size && book.year[i] <= t; i++) if (book.polity[i] === p) tr.feed(book.year[i], p, book.data[i * BOOK_WIDTH + K] > 0);
+  return tr.value(p, t);
+}
