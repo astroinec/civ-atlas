@@ -939,6 +939,10 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       let sum = 0;
       for (const [y, def] of front.get(q)!) sum += chance(p, q, y, def, t, pow);
       const pbar = sum / front.get(q)!.size;
+      // 审势与立国(riseRules.ts 第八批):仇国、记恨、想要物产这几样由头,看形势才加——没胜算、国力差得远、国用窘迫都不加
+      const judged = t >= riseK.FROM8;
+      const sway = judged ? Math.max(0, Math.min(1, (pbar - riseK.JUDGE_LO) / (riseK.JUDGE_HI - riseK.JUDGE_LO))) * (pow[p] >= riseK.JUDGE_POW * pow[q] ? 1 : 0) * Math.min(1, money) : 1;
+      const lift = (m: number) => (judged ? 1 + (m - 1) * sway : m);
       let o = WAR_ODDS * P.expansionism * fpow(pbar / (1 - pbar), LOCAL_EXP) * Math.sqrt(Math.min(1, n / BORDER_FULL));
       if (Q.culture !== P.culture) o *= FOREIGN;
       o *= 1 + REVANCHE * Math.min(4, claims(q));
@@ -953,8 +957,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       const wq = weakness(q, t);
       o *= wq.odds;
       // 记恨:近年在战场上输给它、丢了州
-      if (t - (wm.grudge.get(p * 32768 + q) ?? -Infinity) < GRUDGE_YEARS) o *= GRUDGE;
-      if (pol && picks(pm, pol.foes, q)) o *= FOE_ODDS;
+      if (t - (wm.grudge.get(p * 32768 + q) ?? -Infinity) < GRUDGE_YEARS) o *= lift(GRUDGE);
+      if (pol && picks(pm, pol.foes, q)) o *= lift(FOE_ODDS);
       // 疆土与封建(riseRules.ts 第七批):管不过来的大国少扩张(超出能稳管的州数越多,宣战越少);立国不满 SUBMIT_GRACE 年的国家也少挨打
       if (t >= riseK.FROM7) {
         // 政教:同教相亲、异教相仇;同教之国不轻易打教国
@@ -974,7 +978,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (lack && lack.want) {
         for (const y of front.get(q)!.keys()) got |= api.war.resOf!(y);
         got &= lack.want;
-        if (got) o *= 1 + RES_WANT * Math.min(RES_MAX, bits(got) + (got & lack.gate ? 1 : 0));
+        if (got) o *= lift(1 + RES_WANT * Math.min(RES_MAX, bits(got) + (got & lack.gate ? 1 : 0)));
       }
       // 国用不足:没钱打仗;国库空竭的,边境对面有富州就去抢(一样富的取治所地块小的)
       let rich = -1;

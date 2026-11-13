@@ -68,6 +68,7 @@ import { defineKnobs } from './engine/knobs';
 import { RISE_KNOBS } from './riseRules';
 import { mulOf } from './influence';
 import { faithSimOf } from './religion';
+import { Cap, CAP_COUNT, devModelOf } from './development';
 
 // ---- 调参(以截图和统计数为准,见 scripts/gen-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -273,7 +274,26 @@ function restoreTime(pol: PoliticsModel, f: number, ended: Year, k: number): num
 /** 第 k 次看部落地带的时刻 */
 function tribalTime(pol: PoliticsModel, k: number): number {
   const { TRIBAL_FIRST, TRIBAL_EVERY } = pol.k;
-  return TRIBAL_FIRST + TRIBAL_EVERY * (k + 0.2 + 0.6 * keyed(pol.base, k, 0, U_TRIBAL_T));
+  const old = (j: number) => TRIBAL_FIRST + TRIBAL_EVERY * (j + 0.2 + 0.6 * keyed(pol.base, j, 0, U_TRIBAL_T));
+  // 审势与立国(riseRules.ts 第八批):FROM8 起改成每 TRIBAL8_EVERY 年看一次(原来那一串里第一次落在 FROM8 以后的那一次起换)
+  const rk = pol.pm.knobs.get(RISE_KNOBS);
+  if (!(rk.FROM8 < 65535)) return old(k);
+  let k8 = tribal8.get(pol);
+  if (k8 === undefined) {
+    k8 = 0;
+    while (old(k8) < rk.FROM8) k8++;
+    tribal8.set(pol, k8);
+  }
+  if (k < k8) return old(k);
+  return rk.FROM8 + rk.TRIBAL8_EVERY * (k - k8 + 0.2 + 0.6 * keyed(pol.base, k, 0, U_TRIBAL_T));
+}
+/** 第八批换看部落地带间隔的那一次的编号(按推演缓存) */
+const tribal8 = new WeakMap<PoliticsModel, number>();
+/** 第八批(每 TRIBAL8_EVERY 年看一次)把原来按 TRIBAL_EVERY 年一次定的机会折成同样的每年机会 */
+function perCheck(pol: PoliticsModel, t: number, p: number): number {
+  const rk = pol.pm.knobs.get(RISE_KNOBS);
+  if (t < rk.FROM8) return p;
+  return 1 - Math.pow(1 - Math.min(1, p), rk.TRIBAL8_EVERY / pol.k.TRIBAL_EVERY);
 }
 
 /** 亡国 f 还能不能复国:没被并掉(并掉的不算亡国)、没复过国、自己不是复国出来的(不一复再复)、不是宗室据地争位立的(一时的内乱) */
@@ -912,6 +932,69 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     }
     return best;
   };
+  // ---- 审势与立国(riseRules.ts 第八批):立国时哪些同族邻城跟着入国 ----
+  /** 各国国都的信息能力平均(人才辈出的比照;每一刻算一次) */
+  let infoAt = -Infinity;
+  let infoMean = 0;
+  const league8 = (s: { id: number; culture: number }, r: number, t: number): number[] => {
+    const rk = pm.knobs.get(RISE_KNOBS);
+    const dev = devModelOf(sim);
+    const info = (q: number) => (dev ? dev.cur[q * CAP_COUNT + Cap.Information] : 0);
+    if (infoAt !== t) {
+      infoAt = t;
+      let n = 0;
+      let sum = 0;
+      for (const P of pm.polities) {
+        if (P.ended !== undefined || pm.size[P.id] <= 0) continue;
+        const v = info(capRegion(P.id, t));
+        if (Number.isFinite(v)) { sum += v; n++; }
+      }
+      infoMean = n ? sum / n : Infinity;
+    }
+    const cu = culture[r];
+    const big = populationAt(pm.settlements[s.id], t);
+    const talent = dev !== undefined && info(r) >= rk.TALENT_RATIO * infoMean;
+    const late = (dev?.worldEra ?? 0) >= rk.LATE_ERA;
+    const can = (j: number) => {
+      const c = pm.cityOf[j];
+      if (owner[j] >= 0 || culture[j] !== cu || c < 0) return -1;
+      const S = pm.settlements[c];
+      if (S.ended !== undefined || S.culture !== cu || api.polity.closed?.(j, -1, t)) return -1;
+      const pj = populationAt(S, t);
+      return pj >= rk.FED8_POP ? pj : -1;
+    };
+    const taken = new Set<number>([r]);
+    const out: number[] = [];
+    let room = -1;
+    let ring = [r];
+    for (let depth = 0; depth < (late ? 2 : 1); depth++) {
+      const cand: [number, number][] = [];
+      for (const a of ring) {
+        for (let q = reg.adjStart[a]; q < reg.adjStart[a + 1]; q++) {
+          if (reg.adjKind[q] === AdjKind.SeaRoute) continue;
+          const j = reg.adj[q];
+          if (taken.has(j) || cand.some((x) => x[0] === j)) continue;
+          const pj = can(j);
+          if (pj >= 0) cand.push([j, pj]);
+        }
+      }
+      cand.sort((x, y) => y[1] - x[1] || x[0] - y[0]);
+      const dom = cand.filter((x) => big >= rk.DOM_RATIO * x[1]);
+      if (room < 0) room = (dom.length ? rk.DOM_MAX : 0) + (talent ? rk.TALENT_MAX : 0) + (late ? rk.LATE_ADD : 0);
+      const next: number[] = [];
+      for (const [j, pj] of cand) {
+        if (out.length >= room) break;
+        // 一城独大:只带比它小得多的邻城;人才辈出、大后期:同族的邻城都肯来
+        if (!(talent || late || big >= rk.DOM_RATIO * pj)) continue;
+        out.push(j);
+        taken.add(j);
+        next.push(j);
+      }
+      if (!next.length || out.length >= room) break;
+      ring = next;
+    }
+    return out;
+  };
   // ---- 教国(疆土与封建,riseRules.ts 第七批):大教的圣城立教国 ----
   const tryTheocracy = (k: number, t: number) => {
     const rk = pm.knobs.get(RISE_KNOBS);
@@ -928,7 +1011,7 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       const r = s.region;
       const o = owner[r];
       if (culture[r] < 0 || wm.iv?.locked(r, t) || api.polity.closed?.(r, -1, t)) continue;
-      if (keyed(pol.base, pm.stag[s.id], k, U_THEO) >= rk.THEO_P) continue;
+      if (keyed(pol.base, pm.stag[s.id], k, U_THEO) >= perCheck(pol, t, rk.THEO_P)) continue;
       if (o < 0) {
         const p = addPolity(pm, s.id, culture[r], t, { theocracy: F.id });
         sim.setOwner(Layer.Polity, r, p.id, Ev.PolityFound);
@@ -945,7 +1028,8 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     let caps: Uint8Array | null = null;
     let bigDone = 0;
     // 新立国规则下先看最大的城(同样大的按编号),大城自立每次最多 BIG_MAX 个
-    const order = t >= pm.knobs.get(RISE_KNOBS).FROM ? [...pm.settlements].sort((a, b) => capacityAt(b, t) - capacityAt(a, t) || a.id - b.id) : pm.settlements;
+    const rk0 = pm.knobs.get(RISE_KNOBS);
+    const order = t >= rk0.FROM || t >= rk0.FROM8 ? [...pm.settlements].sort((a, b) => capacityAt(b, t) - capacityAt(a, t) || a.id - b.id) : pm.settlements;
     for (const s of order) {
       const r = s.region;
       if (s.capitalFrom !== undefined || s.ended !== undefined || owner[r] >= 0 || culture[r] < 0 || api.polity.closed?.(r, -1, t)) continue;
@@ -968,30 +1052,33 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       // 大城自立(新立国规则):够大、够老的城,国都间距放宽成 BIG_SPACING 倍,不必挨着大国,有机会自己立国
       // 疆土与封建(riseRules.ts 第七批):门槛换成 BIG7_*,立国时带上挨着的同族有城的无主州(合众)
       const r7 = rise && t >= rk.FROM7;
-      const [bCap, bPop, bAge, bP, bMax] = r7 ? [rk.BIG7_CAP, rk.BIG7_POP, rk.BIG7_AGE, rk.BIG7_P, rk.BIG7_MAX] : [BIG_CAP, BIG_POP, BIG_AGE, BIG_P, BIG_MAX];
+      // 审势与立国(第八批):人口过万、建城满几年的无主城就可能立国(每十年看一次)
+      const r8 = t >= rk.FROM8;
+      const [bCap, bPop, bAge, bP, bMax] = r8 ? [0, rk.BIG8_POP, rk.BIG8_AGE, rk.BIG8_P, rk.BIG8_MAX] : r7 ? [rk.BIG7_CAP, rk.BIG7_POP, rk.BIG7_AGE, rk.BIG7_P, rk.BIG7_MAX] : [BIG_CAP, BIG_POP, BIG_AGE, BIG_P, BIG_MAX];
       // 紧挨别国国都的无主大城:先看那国要不要和平收编
-      if (r7 && populationAt(s, t) >= rk.ABSORB_POP) {
+      if ((r7 || r8) && populationAt(s, t) >= rk.ABSORB_POP) {
         let host = -1;
         for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1]; q++) {
           if (reg.adjKind[q] === AdjKind.SeaRoute || reg.adjKind[q] === AdjKind.Strait) continue;
           const o = owner[reg.adj[q]];
           if (o >= 0 && pm.polities[o].ended === undefined && capRegion(o, t) === reg.adj[q] && (host < 0 || o < host)) host = o;
         }
-        if (host >= 0 && keyed(pol.base, pm.stag[s.id], k, U_ABSORB) < rk.ABSORB_P) {
+        if (host >= 0 && keyed(pol.base, pm.stag[s.id], k, U_ABSORB) < perCheck(pol, t, rk.ABSORB_P)) {
           // 和平收编:和国家自然扩进无主州一样走 PolityArrive(不记史事;地图上那州归了那国)
           sim.setOwner(Layer.Polity, r, host, Ev.PolityArrive);
           capsNow();
           continue;
         }
       }
-      if (rise && (rush || bigDone < bMax) && capacityAt(s, t) >= bCap && populationAt(s, t) >= bPop && t - s.founded >= bAge
-        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < bP) && (r7 || !nearCapital(r, BIG_SPACING * pm.spacing, capsNow()))) {
+      if ((rise || r8) && (rush || bigDone < bMax) && capacityAt(s, t) >= bCap && populationAt(s, t) >= bPop && t - s.founded >= bAge
+        && (rush || keyed(pol.base, pm.stag[s.id], k, U_BIG) < bP) && (r7 || r8 || !nearCapital(r, BIG_SPACING * pm.spacing, capsNow()))) {
         const bm = mentorOf(r, t);
         const bnomad = pm.cultures[culture[r]].kind === 'nomad' || (bm >= 0 && pm.polities[bm].lineage === 'khanate');
         const p = addPolity(pm, s.id, culture[r], t, bm >= 0 ? (bnomad ? { mentor: bm } : { mentor: bm, lineage: pm.polities[bm].lineage }) : {});
         sim.setOwner(Layer.Polity, r, p.id, Ev.PolityFound);
         const fed: number[] = [];
-        if (r7) {
+        if (r8) fed.push(...league8(s, r, t));
+        else if (r7) {
           for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1] && fed.length < rk.FED_MAX; q++) {
             if (reg.adjKind[q] === AdjKind.SeaRoute) continue;
             const j = reg.adj[q];
@@ -1013,7 +1100,7 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       if (m < 0) continue;
       const M = pm.polities[m];
       const edgeP = rise ? Math.min(1, EDGE_P * EDGE_MUL) : EDGE_P;
-      if (!rush && keyed(pol.base, pm.stag[s.id], k, U_EDGE) >= (culture[r] === M.culture ? edgeP : edgeP / 2)) continue;
+      if (!rush && keyed(pol.base, pm.stag[s.id], k, U_EDGE) >= perCheck(pol, t, culture[r] === M.culture ? edgeP : edgeP / 2)) continue;
       if (nearCapital(r, (rise ? EDGE_SPACING_RISE : EDGE_SPACING) * pm.spacing, capsNow())) continue;
       // 国号一系(王国 / 共和国)沿用那一国的;游牧的汗国和定居的国家不互相沿用
       const nomad = pm.cultures[culture[r]].kind === 'nomad' || M.lineage === 'khanate';

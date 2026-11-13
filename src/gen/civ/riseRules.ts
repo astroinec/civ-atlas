@@ -179,4 +179,32 @@ export const RISE_KNOBS = defineKnobs('rise', {
   TERRAIN_DRY_DEF: 1.1,
   NOMAD_ROUGH: 0.85,
   NOMAD_OPEN: 1.1,
+  /**
+   * 第八批(审势与立国)从这一年起生效(规则项 split.judgeFrom);65535 = 不用:
+   *   ① 审势开战(wars.ts):方针里的仇国(FOE_ODDS)、记恨(GRUDGE)、想要对面的物产(RES_WANT)这几样"由头"加的赔率,
+   *      要看眼下的形势打折:边境胜算 pbar 在 JUDGE_LO 以下一点不加、到 JUDGE_HI 才加满;国力不到对方 JUDGE_POW 倍不加;
+   *      国用窘迫(钱粮倍数 < 1)按钱粮倍数再打折。照大纲、复仇多看的那一眼也一样按形势算(只是不再白给加成)。
+   *   ② 无主大城立国(politics.ts):看部落地带改成每 TRIBAL8_EVERY 年一次(原 50 年),人口过 BIG8_POP(千人)、建城满 BIG8_AGE 年的无主城
+   *      每次有 BIG8_P 的机会立国,一次最多 BIG8_MAX 个;边地立国、教国、收编的机会按新的间隔折算(每年的机会不变)。
+   *      立国时一般只有这一城一州;同族(城和州都得是本族)的邻城跟着入国只有这几种:
+   *        - 这城人口是邻城的 DOM_RATIO 倍以上(一城独大):比它小得多的邻城各带上,最多 DOM_MAX 座;
+   *        - 这城人才辈出(信息能力 ≥ 各国国都平均的 TALENT_RATIO):人口过 FED8_POP 的同族邻城最多 TALENT_MAX 座;
+   *        - 两样都有,上限相加;天下最先进的已到 LATE_ERA 时代(大后期),上限再加 LATE_ADD,并可再往外一圈
+   */
+  FROM8: 65535,
+  JUDGE_LO: 0.35,
+  JUDGE_HI: 0.55,
+  JUDGE_POW: 0.6,
+  TRIBAL8_EVERY: 10,
+  BIG8_POP: 10,
+  BIG8_AGE: 5,
+  BIG8_P: 0.35,
+  BIG8_MAX: 4,
+  DOM_RATIO: 2,
+  DOM_MAX: 2,
+  TALENT_RATIO: 0.95,
+  TALENT_MAX: 2,
+  FED8_POP: 3,
+  LATE_ERA: 5,
+  LATE_ADD: 2,
 });
