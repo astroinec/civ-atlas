@@ -519,6 +519,13 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (culture[r] === Y.culture) sy *= HOME_DEF;
     // 农耕守势(规则项 split.farmDefFrom;riseRules.ts):农耕国、大河国在本族的州上守得更牢;没生效 = 不乘,和原来逐位一样
     if (t >= riseK.FROM5 && culture[r] === Y.culture && (Y.kind === 'farm' || Y.kind === 'river')) sy *= riseK.FARM_DEF;
+    // 国用与国势(riseRules.ts 第十批):入不敷出、欠饷的一方兵力打折(没生效 = 1,不乘)
+    if (t >= riseK.FROM10 && api.war.pay) {
+      const px = api.war.pay(x, t);
+      if (px !== 1) sx *= px;
+      const py = api.war.pay(y, t);
+      if (py !== 1) sy *= py;
+    }
     // 疆土与封建(riseRules.ts 第七批):州自身的地形 —— 高山、湿地雨林、荒漠易守难攻;游牧骑兵进山林吃亏、在开阔地占便宜
     if (t >= riseK.FROM7) {
       const el = reg.elevation[r];

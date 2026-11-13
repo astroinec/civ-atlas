@@ -523,6 +523,32 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     return true;
   };
 
+  // ---- 国用与国势(riseRules.ts 第十批):欠饷十年以上,离国都最远的有城之州兵民大起义(control.ts 每年看) ----
+  api.politics.mutiny = (P, t) => {
+    const pid = P.id;
+    const N = pm.size[pid];
+    if (P.ended !== undefined || N < REVOLT_STATE || rebelNow(pid) || wm.iv?.unites(pid, t)) return false;
+    const capR = pm.settlements[capitalAt(P, t)].region;
+    const dist = pm.capDist[pid];
+    let r0 = -1;
+    for (const r of pm.lands[pid]) {
+      if (r === capR || pm.cityOf[r] < 0 || wm.iv?.locked(r, t)) continue;
+      if (r0 < 0 || (dist[r] ?? 0) > (dist[r0] ?? 0) || ((dist[r] ?? 0) === (dist[r0] ?? 0) && r < r0)) r0 = r;
+    }
+    if (r0 < 0) return false;
+    const limit = Math.min(REVOLT_MAX, Math.max(REVOLT_MIN, Math.floor(N * REVOLT_FRAC)));
+    const group = grow(pid, r0, limit, t, () => 0, capR);
+    if (group.length < REVOLT_MIN) return false;
+    const sid = api.politics.biggestCity!(group, t);
+    if (sid < 0) return false;
+    const full = api.politics.cutOff!(pid, group.slice().sort((a, b) => a - b), t, limit * 2 + 2);
+    if (!full) return false;
+    const rebel = api.politics.secede!(pid, full, sid, r0, t, 'revolt', 'arrears');
+    const w = api.war.declare!(pid, rebel.id, t, -1, 'quell');
+    um.quell.set(w.id, rebel.id);
+    return true;
+  };
+
   /**
    * 从州 r0 往外长一个州组(pid 的国土,只走陆路,不碰 skip):按"cost(州) + 离 r0 隔几州"从小到大挑,最多 limit 州。
    * 返回挑上的州(按挑的先后)

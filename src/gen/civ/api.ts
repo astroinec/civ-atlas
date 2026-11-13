@@ -70,6 +70,8 @@ export interface WarApi {
   broke?: (p: number, t: Year) => number;
   /** 钱粮(control.ts 提供):国家 p 的国库攒到几成(0–1;满 = 攒够了几年的用度) */
   purse?: (p: number, t: Year) => number;
+  /** 国用与国势(control.ts 提供;riseRules.ts 第十批):国家 p 此刻打仗的兵力打几折(入不敷出越久越低;没生效 / 不欠饷 = 1) */
+  pay?: (p: number, t: Year) => number;
   /** 钱粮(control.ts 提供):州 r 的收入(田赋、工商、市税之和)是国家 p 每州平均的几倍(p 还没算过账 = 0):为掠夺而战挑富州 */
   rich?: (p: number, r: number) => number;
   /** 割据(control.ts 提供):国家 p 此刻有几处割据、最早起的那处在哪州(没有 = n 为 0):邻国趁虚而入 */
@@ -147,6 +149,14 @@ export interface PoliticsApi {
   cutOff?: (pid: number, group: number[], t: Year, cap: number) => number[] | null;
   /** 州组里人口最多的城(hook 里填;没有城 = −1) */
   biggestCity?: (group: readonly number[], t: Year) => number;
+  /** 国用与国势(control.ts 提供;riseRules.ts 第十批):国家 p 入不敷出连着几年(第一年 = 1;不在入不敷出、没生效 = 0) */
+  arrears?: (p: number, t: Year) => number;
+  /** 开支干预(control.ts 提供):国家 p 的国库减 amount 成"攒满的国库"的百分之一(负数 = 进项;不低于 0) */
+  spend?: (p: number, amount: number, t: Year) => void;
+  /** 国用与国势:欠饷多年的兵民大起义(unrest.ts 提供;revolt cause arrears + 讨伐);起成了 = true */
+  mutiny?: (P: Polity, t: Year) => boolean;
+  /** 国用与国势:国用久乏、被迫分封边地(politics.ts 提供;split cause arrears + 受封称臣);封成了 = true */
+  enfeoff?: (P: Polity, t: Year) => boolean;
   /** 看内政时分裂没成之后:收回割据、新起割据(control.ts 提供);出了一件事 = true */
   lordCheck?: (P: Polity, k: number, t: Year) => boolean;
   /** 看内政最后(分裂、割据、合并、迁都都没出事):议一件事(council.ts 提供) */

@@ -2001,6 +2001,9 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       } else if (e.cause === 'theocracy') {
         const tf = P?.theocracy;
         t = `${pn(civ, e.b, y)}以圣城${r || ''}归${tf !== undefined ? civ.religion?.faiths?.[tf]?.name ?? '教团' : '教团'},立为教国,号${A}`;
+      } else if (e.cause === 'arrears') {
+        // 国用与国势(politics.ts):"大渭国用久乏,无以赡军,以瑞州等地分封李昭,号瑞国"
+        t = `${pn(civ, e.b, y)}国用久乏,无以赡军,以${r ? `${r}等地` : '边地'}分封${who ? who.name : '宗室'},号${A}`;
       } else if (e.cause === 'enfeoff') {
         // 分封(疆土与封建,politics.ts):"大渭疆土广远,难以尽治,以瑞州等地分封李昭,号瑞国"
         t = `${pn(civ, e.b, y)}疆土广远,难以尽治,以${r ? `${r}等地` : '边地'}分封${who ? who.name : '宗室'},号${A}`;
@@ -3215,6 +3218,7 @@ function lordText(civ: Civ, e: Annal): string {
   const A = pn(civ, e.a, e.year);
   const r = regionName(civ, e.region) || cityName(civ, e.settlement) || '一方';
   const lord = `${r}${polityOf(civ, e.a)?.eastern ? '守将' : '领主'}`;
+  if (e.kind === 'warlord' && e.cause === 'arrears') return `${A}欠饷日久,${lord}拥兵自重,割据${e.war > 1 ? `${r}等${e.war === 2 ? '两' : cnNumber(e.war)}州` : r},名义上仍奉${A}`;
   if (e.kind === 'warlord') return `${lord}拥兵自重,割据${e.war > 1 ? `${r}等${e.war === 2 ? '两' : cnNumber(e.war)}州` : r},名义上仍奉${A}`;
   if (e.kind === 'reclaim') return e.war >= 1 ? `${A}收回割据${cnNumber(e.war)}年的${r}` : `${A}收回${r}`;
   return `${A}与${pn(civ, e.b, e.year)}交兵,${lord}拥兵不出`;
@@ -3226,6 +3230,8 @@ function lordText(civ: Civ, e: Annal): string {
  */
 function fiscalText(civ: Civ, e: Annal, foes: number[]): string {
   const A = pn(civ, e.a, e.year);
+  // 国用与国势(control.ts):入不敷出满几年,加派赋税
+  if (e.cause === 'arrears') return `${A}入不敷出已${cnNumber(e.n ?? 5)}年,加派赋税以济军需,民怨渐起`;
   if (e.war === 0) return `${A}连年用兵,府库空竭`;
   if (foes.length) return `${A}用兵于${pn(civ, foes[0], e.year)},诸州又多截留赋税,府库空竭`;
   return `${A}诸州多截留赋税,府库空竭`;
@@ -3683,7 +3689,10 @@ function revoltEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
   const city = cityName(civ, e.settlement);
   const lead = founderOf(ctx.ix, rebel, 0);
   const who = lead && lead.rise === 'rebel' ? lead : null;
-  const t = `${r || city || '境内'}大饥,饥民${who ? `奉${who.name}为主,` : ''}${city ? `据${city}起事` : '起事'},号${pn(civ, rebel, y)},叛${pn(civ, court, y)}`;
+  // 国用与国势(control.ts):欠饷多年的兵民起事
+  const t = e.cause === 'arrears'
+    ? `${pn(civ, court, y)}军饷积欠多年,${r || city || '边地'}兵民${who ? `奉${who.name}为主,` : ''}${city ? `据${city}起事` : '起事'},号${pn(civ, rebel, y)}`
+    : `${r || city || '境内'}大饥,饥民${who ? `奉${who.name}为主,` : ''}${city ? `据${city}起事` : '起事'},号${pn(civ, rebel, y)},叛${pn(civ, court, y)}`;
   const fallR = list.find((f) => f.kind === 'fall' && f.a === rebel);
   const fallC = list.find((f) => f.kind === 'fall' && f.a === court && f.b === rebel);
   const peace = list.find((f) => f.kind === 'peace');

@@ -364,6 +364,8 @@ function ivText(civ: Civ, v: Intervention, i: number, a: string | undefined): st
       return `${A}:${keyName(civ, v.b, v.from) || '他国'}来此传教（至第 ${v.until} 年）`;
     case 'urge':
       return `${A}:倡议新说（至第 ${v.until} 年）`;
+    case 'spend':
+      return `${A}:国库${v.amount >= 0 ? '支出' : '进项'} ${Math.abs(v.amount)}`;
     case 'sway':
       return `${A}:${v.side === 'for' ? '力主' : '力阻'}${({ tax: '直征', army: '收兵权', office: '铨选', fief: '分封', cut: '削藩', reform: '改制' } as Record<string, string>)[v.issue]}（至第 ${v.until} 年）`;
     case 'marry': {

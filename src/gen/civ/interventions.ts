@@ -736,6 +736,11 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
       strikeSway(sim, iv, v, i, a, t);
       return;
     }
+    if (v.kind === 'spend') {
+      // 开支(国用与国势,control.ts):只动国库,不记史事
+      civApi(sim).politics.spend?.(a, v.amount, t);
+      return;
+    }
     if (v.kind === 'boost') {
       // 推一把发展:快几倍登记(发展度每一步照着乘)/ 直接进下一个时代(boost.ts;史事 intervene 也在那里记)
       strikeBoost(sim, iv, v, i, a, t);

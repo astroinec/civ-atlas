@@ -753,7 +753,8 @@ export type InterventionKind =
   | 'appoint'
   | 'mission'
   | 'urge'
-  | 'sway';
+  | 'sway'
+  | 'spend';
 
 /**
  * 大迁徙(trek)"推演挑"时走多远:near 近(五到十州)/ mid 中(十到二十州,和推演自己起的一样)/ far 远(二三十州,横穿大陆,只有下令才有)。
@@ -887,6 +888,8 @@ export type Intervention = (
   | { kind: 'mission'; a: string; b: string; from: number; until: number; mul: number }
   /** 倡议学说:a 国鼓吹第 idea 说(ideoTables.ts 的思潮表下标),国中已传进来的州扎根更快,到 until 为止 */
   | { kind: 'urge'; a: string; idea: number; from: number; until: number }
+  /** 开支(国用与国势):from 那一刻 a 的国库减 amount 成"攒满的国库"的百分之一(负数 = 进项);只动账、不记史事 */
+  | { kind: 'spend'; a: string; from: number; amount: number }
   /** 议事施压:a 国议 issue 这一类议题时推一把(for)或拦一把(against),到 until 为止 */
   | { kind: 'sway'; a: string; issue: SwayIssue; side: 'for' | 'against'; from: number; until: number }
   | {
@@ -1973,7 +1976,7 @@ function folkRenamed(civ: Civ, f: Faith, cultures: readonly Culture[]): string |
 /** 干预年份的上限(推演引擎能预约的最远时刻) */
 export const INTERVENTION_YEAR_MAX = 65535;
 
-export const INTERVENTION_KINDS: readonly InterventionKind[] = ['protect', 'ally', 'declare', 'unity', 'cede', 'found', 'move', 'halt', 'crown', 'policy', 'destroy', 'death', 'temper', 'disaster', 'treaty', 'neutral', 'regent', 'marry', 'keep', 'boost', 'trek', 'stay', 'appoint', 'mission', 'urge', 'sway'];
+export const INTERVENTION_KINDS: readonly InterventionKind[] = ['protect', 'ally', 'declare', 'unity', 'cede', 'found', 'move', 'halt', 'crown', 'policy', 'destroy', 'death', 'temper', 'disaster', 'treaty', 'neutral', 'regent', 'marry', 'keep', 'boost', 'trek', 'stay', 'appoint', 'mission', 'urge', 'sway', 'spend'];
 
 /** 议事施压的几类议题(civ/authorSway.ts 换成议事的议题):tax 直征、army 兵权、office 任免、fief 分封、cut 削藩、reform 改制 */
 export const SWAY_ISSUES = ['tax', 'army', 'office', 'fief', 'cut', 'reform'] as const;
@@ -2362,6 +2365,10 @@ export function tidyIntervention(x: unknown): Intervention | null {
       const t = cleanTreatyIv(o, kind, a, from);
       if (!t) return null;
       v = t;
+    } else if (kind === 'spend') {
+      const m = typeof o.amount === 'number' && Number.isFinite(o.amount) ? Math.round(Math.max(-100, Math.min(100, o.amount)) * 100) / 100 : 0;
+      if (!m) return null;
+      v = { kind, a, from, amount: m };
     } else if (kind === 'boost') {
       const b = cleanBoost(o, a, from, untilOf());
       if (!b) return null;

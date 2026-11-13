@@ -758,6 +758,14 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     if (!(N > gov)) return false;
     const odds = rk.FEUD_P * Math.min(1, 2 * (N / gov - 1));
     if (keyed(pol.base, pm.ptag[pid], k, U_FEUD) >= odds) return false;
+    return enfeoffGroup(P, t, foes, 'enfeoff');
+  };
+  /** 把离国都最远的几州(不挨着敌国 foes)封出去立国、受封的称臣;cause = enfeoff(管不过来)/ arrears(国用久乏,被迫分封) */
+  const enfeoffGroup = (P: Polity, t: number, foes: Set<number>, cause: 'enfeoff' | 'arrears'): boolean => {
+    const rk = pm.knobs.get(RISE_KNOBS);
+    const pid = P.id;
+    const N = pm.size[pid];
+    const front = (r: number) => { for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1]; q++) if (foes.has(owner[reg.adj[q]])) return true; return false; };
     const dist = pm.capDist[pid];
     const capR = capRegion(pid, t);
     const mine = regionsOf(pid).filter((r) => r !== capR && settled(r, t) && !wm.iv?.locked(r, t) && !front(r));
@@ -788,9 +796,19 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     if (!cut || cut.length >= N) return false;
     const sid = biggestCity(cut, t);
     if (sid < 0) return false;
-    const v = secede(pid, cut, sid, r0, t, {}, 'split', 'enfeoff');
+    const v = secede(pid, cut, sid, r0, t, {}, 'split', cause);
     api.diplomacy.vassalize?.(v.id, pid, t, 'enfeoff');
     return true;
+  };
+  // 国用与国势(riseRules.ts 第十批):欠饷十年以上被迫分封(control.ts 每年看;不看治理能力、不掷分封的机会)
+  api.politics.enfeoff = (P, t) => {
+    const rk = pm.knobs.get(RISE_KNOBS);
+    const pid = P.id;
+    if (P.ended !== undefined || pm.size[pid] < rk.FEUD_MIN || wm.iv?.unites(pid, t)) return false;
+    if (api.diplomacy.liegeOf && api.diplomacy.liegeOf(pid) >= 0) return false;
+    const foes = new Set<number>();
+    for (const x of wm.wars) if (x.end === undefined && (x.a === pid || x.b === pid)) foes.add(x.a === pid ? x.b : x.a);
+    return enfeoffGroup(P, t, foes, 'arrears');
   };
 
   sim.on(Ev.PoliticsCheck, (k, p, t) => {

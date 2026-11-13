@@ -499,7 +499,7 @@ export type AnnalKind =
  *   revolution:议立宪 / 废君谈崩、起兵的人打不进国都,据地自立为共和国(史事 split 的 cause,reform.ts;紧跟在那条 council 后面);
  *   surrender 强国打下国都,余下的州一并归降、亡国(破都纳降,wars.ts;fall 的 cause)
  */
-export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'enfeoff' | 'league' | 'tribute' | 'theocracy' | 'federation';
+export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'enfeoff' | 'league' | 'tribute' | 'theocracy' | 'federation' | 'arrears';
 
 /**
  * 一条史事(阶段 3):推演里各事件处理函数用 CivSim.record 往 Civ.annals 里记,编年史(界面上的事件列表)只读它。

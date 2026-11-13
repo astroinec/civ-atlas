@@ -51,6 +51,8 @@ import type { CivModule } from './modules';
 import { Ev } from './events';
 import { defineKnobs } from './engine/knobs';
 import { mulOf } from './influence';
+import { civApi } from './api';
+import { RISE_KNOBS } from './riseRules';
 
 // ---- 调参(以统计数为准,见 scripts/gen-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -201,6 +203,13 @@ function hook(sim: CivSim, dm: DynastyModel): void {
     const split = politicsModelOf(sim)?.lastSplit.get(pid);
     if (split !== undefined && t - split < RECENT_SPLIT) u += C_SPLIT;
     if (pm.size[pid] < DECLINE * TIER_REGIONS[Math.max(0, pm.tier[pid])]) u += C_DECLINE;
+    // 国用与国势(riseRules.ts 第十批):入不敷出多年,权臣、外戚、豪强乘机(没生效 = arrears 为 0,不加)
+    const arr = civApi(sim).politics.arrears?.(pid, t) ?? 0;
+    if (arr > 0) {
+      const rk = dm.pm.knobs.get(RISE_KNOBS);
+      if (arr >= rk.ARREARS_LATE) u += rk.DYN3;
+      else if (arr >= rk.ARREARS_MID) u += rk.DYN2;
+    }
     // 照大纲顺着引的动荡加减(policy.ts;没有 = 0)
     const g = unrestShiftOf(pm, pid, t);
     if (g) u *= fexp(GUIDE_DYNASTY * g);

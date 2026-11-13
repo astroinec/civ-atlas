@@ -650,6 +650,8 @@ function ivText(civ: Civ, v: Intervention): string {
       return `${id(v.a, 'polity', 'P')} 倡议第 ${v.idea + 1} 种学说${until(v.until)}`;
     case 'sway':
       return `${id(v.a, 'polity', 'P')} 议事施压(${v.issue}, ${v.side})${until(v.until)}`;
+    case 'spend':
+      return `${id(v.a, 'polity', 'P')} 国库${v.amount >= 0 ? '支出' : '进项'} ${Math.abs(v.amount)}`;
   }
 }
 
@@ -1456,6 +1458,7 @@ class Checker {
 }
 
 const KIND_LABEL: Record<Intervention['kind'], string> = {
+  spend: '开支',
   mission: '传教',
   urge: '倡议学说',
   sway: '议事施压',

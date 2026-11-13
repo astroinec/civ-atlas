@@ -241,4 +241,29 @@ export const RISE_KNOBS = defineKnobs('rise', {
   FROM9: 65535,
   ALLY_BASE: 4,
   ALLY_PER: 4,
+  /**
+   * 第十批(国用与国势)从这一年起生效(规则项 split.fiscFrom);65535 = 不用。
+   * "入不敷出"= 国库空了还入不敷出(control.ts 的窘迫 > 0),连着几年(按账本里这一回窘迫起的那年算,第一年算 1):
+   *   ① 欠饷(wars.ts):打仗时本方兵力 × max(PAY_FLOOR, 1 − PAY_STEP × 年数)(第一年九五折、第二年九折、第三年八五折……);
+   *      援盟(diplomacy.ts)的机会 × (1 − JOIN_BROKE × 窘迫):自己都养不起兵,少替人出兵
+   *   ② 满 ARREARS_MID 年(control.ts):加派赋税,动荡 + ARREARS_U2(史事 fiscal,cause arrears);每年有 LORD2_P 的机会边将以欠饷拥兵割据;
+   *      改朝换代(dynasty.ts)的动荡 + DYN2(权臣、外戚易擅政篡位)
+   *   ③ 满 ARREARS_LATE 年:动荡 + ARREARS_U3、改朝换代动荡 + DYN3;每年有 BIG3_P 的机会出一件大事 ——
+   *      国土够分封(≥ FEUD_MIN 州)的,FEUD3_SHARE 的机会被迫分封边地(split cause arrears、受封的称臣),否则兵民大起义(revolt cause arrears,朝廷讨伐)
+   *   ②③ 的割据、大事之后 ARREARS_REST 年内这一国不再出这类事
+   */
+  FROM10: 65535,
+  PAY_STEP: 0.05,
+  PAY_FLOOR: 0.6,
+  JOIN_BROKE: 0.6,
+  ARREARS_MID: 5,
+  ARREARS_LATE: 10,
+  ARREARS_U2: 0.15,
+  ARREARS_U3: 0.3,
+  LORD2_P: 0.03,
+  DYN2: 0.5,
+  DYN3: 1,
+  BIG3_P: 0.025,
+  FEUD3_SHARE: 0.5,
+  ARREARS_REST: 10,
 });

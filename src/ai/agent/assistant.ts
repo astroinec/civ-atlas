@@ -269,6 +269,7 @@ function ivsOf(civ: Civ, edits: WorldEdits, id: number): string[] {
 }
 
 const IV_WORD: Record<Intervention['kind'], string> = {
+  spend: '开支',
   mission: '传教',
   urge: '倡议学说',
   sway: '议事施压',

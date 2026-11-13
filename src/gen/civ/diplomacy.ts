@@ -857,6 +857,8 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       const near = borders(z, x);
       if (!near && !(t >= rk.FROM2 && reach(z, x, y, t))) continue;
       let join = hates(pm, z, y, t) ? 0 : dm.pactOf(z, y)?.league ? 1 : befriends(pm, z, y, t) ? FRIEND_JOIN : PACT_JOIN;
+      // 国用与国势:自己入不敷出的少替人出兵
+      if (t >= riseK.FROM10 && join > 0 && api.war.broke) join *= 1 - riseK.JOIN_BROKE * api.war.broke(z, t);
       if (!near) join *= rk.FAR_JOIN;
       // 结着亲的更肯出兵(marriage.ts)
       if (join > 0 && api.diplomacy.bond) join *= 1 + (KIN_JOIN - 1) * api.diplomacy.bond(z, y, t);

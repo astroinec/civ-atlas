@@ -344,6 +344,7 @@ export type InterventionInfo = (
   | { kind: 'mission'; a: string; b: string; from: number; until: number; mul: number }
   | { kind: 'urge'; a: string; idea: number; from: number; until: number }
   | { kind: 'sway'; a: string; issue: 'tax' | 'army' | 'office' | 'fief' | 'cut' | 'reform'; side: 'for' | 'against'; from: number; until: number }
+  | { kind: 'spend'; a: string; from: number; amount: number }
   | {
       kind: 'policy';
       a: string;

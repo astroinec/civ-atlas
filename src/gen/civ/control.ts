@@ -63,7 +63,7 @@ import { NEVER } from './devTables';
 import { stateCards, type ControlRuleConsts, type FiscalRuleConsts, type StatePlug } from './stateTables';
 import type { TableCard } from './engine/tables';
 import { UNREST_KNOBS, unrestConsts, unrestInputs, unrestModelOf } from './unrest';
-import { BOOK_WIDTH } from './fiscalBook';
+import { BOOK_COLS, BOOK_WIDTH } from './fiscalBook';
 import { popConsts, POP_TABLES, POP_TILE_TABLES, cellsToTiles, popLayer, popTiles, spreadRural, tilesToCells } from './population';
 import { COUNCIL_RULES_KNOBS, councilConsts, cutDone, reorgCap } from './councilRules';
 import type { CivModule } from './modules';
@@ -171,6 +171,12 @@ export const CONTROL_TIERS = ['直辖', '代管', '自治', '割据'] as const;
 const U_PICK = 1;
 const U_RISE = 2;
 const U_RECLAIM = 3;
+/** 国用与国势(riseRules.ts 第十批):欠饷割据、大事、大事挑哪一样 */
+const U_ARR_LORD = 4;
+const U_ARR_BIG = 5;
+const U_ARR_PICK = 6;
+/** 账本一行里"窘迫"是第几列 */
+const BOOK_BROKE = BOOK_COLS.indexOf('窘迫');
 
 /** 快照里的一个数是哪一档(0 直辖、1 代管、2 自治、3 割据);0(不在国家里)当自治 */
 export function controlTier(knobs: KnobSet, v: number): number {
@@ -275,7 +281,7 @@ export function resumeControl(sim: CivSim, civ: Civ): void {
   /** 各国最近一次记国用不足的年份 */
   const noted = new Map<number, Year>();
   for (const e of civ.annals) {
-    if (e.kind === 'fiscal') noted.set(e.a, e.year);
+    if (e.kind === 'fiscal' && e.cause !== 'arrears') noted.set(e.a, e.year);
     else if (e.kind === 'council' && cutDone(e)) {
       // 削藩办成:那一处割据了结
       const w = latest(e.a, e.region);
@@ -593,9 +599,9 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     return rs;
   };
   /** 新起一处割据,记 warlord(地盘有几州借用 war 列) */
-  const rise = (p: number, r: number, t: number): void => {
+  const rise = (p: number, r: number, t: number, cause?: 'arrears'): void => {
     lords.push({ p, region: r, city: pm.cityOf[r], start: t, defied: -Infinity });
-    sim.record('warlord', { a: p, region: r, settlement: pm.cityOf[r], war: domainOf(lords[lords.length - 1], t).length });
+    sim.record('warlord', { a: p, region: r, settlement: pm.cityOf[r], war: domainOf(lords[lords.length - 1], t).length, ...(cause ? { cause } : {}) });
   };
   const canRaise = (p: number, r: number, t: number): boolean => {
     const s = pm.cityOf[r];
@@ -707,8 +713,38 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     const over = riseK.OVER_W * Math.min(riseK.OVER_MAX, Math.max(0, pm.size[p] / cap - 1));
     return over;
   };
+  /**
+   * 国用与国势(riseRules.ts 第十批):入不敷出连着几年 —— 按账本(fiscalBook.ts)里这一回窘迫起的那一行算。
+   * 账本每年记完扫一遍新记的行(接着推时从存档的账本从头扫,和一口气推下来的一样)
+   */
+  const brokeSince = new Map<number, number>();
+  let bookScanned = 0;
+  const scanBook = (): void => {
+    const B = dev.book;
+    if (B.years.length < bookScanned) {
+      brokeSince.clear();
+      bookScanned = 0;
+    }
+    for (let i = bookScanned; i < B.years.length; i++) {
+      const q = B.polities[i];
+      if (B.data[i * BOOK_WIDTH + BOOK_BROKE] > 0) {
+        if (!brokeSince.has(q)) brokeSince.set(q, B.years[i]);
+      } else brokeSince.delete(q);
+    }
+    bookScanned = B.years.length;
+  };
+  const arrearsOf = (p: number, t: number): number => {
+    if (t < riseK.FROM10 || !(p < tBroke.length) || !(tBroke[p] > 0)) return 0;
+    const since = brokeSince.get(p);
+    return since === undefined ? 1 : Math.max(1, Math.floor(t) - since + 1);
+  };
+  /** 欠饷加的动荡(加派赋税、兵民离心):没生效 = 0 */
+  const arrearsU = (p: number, t: number): number => {
+    const n = arrearsOf(p, t);
+    return n >= riseK.ARREARS_LATE ? riseK.ARREARS_U3 : n >= riseK.ARREARS_MID ? riseK.ARREARS_U2 : 0;
+  };
   const guided = (p: number, t: number, u0: number): number => {
-    const u = u0 + overOf(p, t);
+    const u = u0 + overOf(p, t) + arrearsU(p, t);
     const g = unrestShiftOf(pm, p, t);
     return g ? Math.max(0, u + GUIDE_UNREST * g) : u;
   };
@@ -723,6 +759,69 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
   api.war.unrest = (p, t) => guided(p, t, p < tU.length ? tU[p] : 0);
   // ---- 钱粮:国用不足(窘迫)让宣战少、战事早罢(wars.ts) ----
   api.war.broke = (p, _t) => (p < tBroke.length ? tBroke[p] : 0);
+  api.politics.arrears = arrearsOf;
+  api.politics.spend = (p, amount, _t) => {
+    if (!(p < tBroke.length) || !(pm.size[p] > 0)) return;
+    const tr = eng.get('国库');
+    const full = RESERVE * eng.value('应缴', p);
+    if (!(full > 0)) return;
+    tr[p] = Math.max(0, Math.min(full, tr[p] - (amount / 100) * full));
+  };
+  api.war.pay = (p, t) => {
+    const n = arrearsOf(p, t);
+    return n > 0 ? Math.max(riseK.PAY_FLOOR, 1 - riseK.PAY_STEP * n) : 1;
+  };
+  /** 这一国 ARREARS_REST 年内出过欠饷的割据、大事没有(从史事里倒着查) */
+  const arrearsRested = (p: number, t: number): boolean => {
+    for (let i = sim.annalCount - 1; i >= 0; i--) {
+      const e = sim.annal(i);
+      if (e.year < t - riseK.ARREARS_REST) break;
+      if (e.cause !== 'arrears') continue;
+      if ((e.kind === 'warlord' && e.a === p) || ((e.kind === 'revolt' || e.kind === 'split') && e.b === p)) return false;
+    }
+    return true;
+  };
+  /** 这一年(接着推时可能重算同一年)已记过加派那一笔 */
+  const notedArrears = (p: number, t: number): boolean => {
+    for (let i = sim.annalCount - 1; i >= 0; i--) {
+      const e = sim.annal(i);
+      if (e.year < t - 1) break;
+      if (e.kind === 'fiscal' && e.cause === 'arrears' && e.a === p) return true;
+    }
+    return false;
+  };
+  /** 每年记完账:欠饷满五年加派赋税(记一笔)、边将割据;满十年被迫分封或兵民大起义 */
+  const arrearsYear = (t: number): void => {
+    if (t < riseK.FROM10) return;
+    const Y = Math.floor(t);
+    for (let p = 0; p < tBroke.length; p++) {
+      if (!(pm.size[p] > 0)) continue;
+      const n = arrearsOf(p, t);
+      if (n < riseK.ARREARS_MID) continue;
+      const P = pm.polities[p];
+      if (!P || P.ended !== undefined) continue;
+      if (n === riseK.ARREARS_MID && !notedArrears(p, t)) {
+        const sid = capitalAt(P, t);
+        sim.record('fiscal', { a: p, region: pm.settlements[sid].region, settlement: sid, war: 1, cause: 'arrears', n });
+      }
+      if (!arrearsRested(p, t)) continue;
+      if (n >= riseK.ARREARS_LATE && keyed(cm.base, pm.ptag[p], Y, U_ARR_BIG) < riseK.BIG3_P) {
+        const feud = pm.size[p] >= riseK.FEUD_MIN && keyed(cm.base, pm.ptag[p], Y, U_ARR_PICK) < riseK.FEUD3_SHARE;
+        if (feud ? api.politics.enfeoff?.(P, t) || api.politics.mutiny?.(P, t) : api.politics.mutiny?.(P, t) || api.politics.enfeoff?.(P, t)) continue;
+      }
+      if (keyed(cm.base, pm.ptag[p], Y, U_ARR_LORD) < riseK.LORD2_P) {
+        // 管得最松、有城的那州(不是国都)的守将拥兵割据
+        let best = -1;
+        let bc = Infinity;
+        for (const r of pm.lands[p]) {
+          if (!canRaise(p, r, t) || wm.iv?.locked(r, t)) continue;
+          const c = raw(p, r, t);
+          if (c < bc || (c === bc && r < best)) { bc = c; best = r; }
+        }
+        if (best >= 0) rise(p, best, t, 'arrears');
+      }
+    }
+  };
   // ---- 国力(wars.ts、diplomacy.ts):上一步算的;那一步还没有地的国家(这一年里才立的)让那边现算 ----
   api.war.power = (p) => (powReady && p < tPow.length && tSize[p] > 0 ? tPow[p] : -1);
   api.war.purse = (p, _t) => {
@@ -775,6 +874,10 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     refresh();
     note(t);
     book(t);
+    if (t >= riseK.FROM10) {
+      scanBook();
+      arrearsYear(t);
+    }
     if (dev.last === t) snapshot(t);
   };
   /** 记账(给界面看,见 fiscalBook.ts):按这一步算账时的归属,把各州的三样收入、截留按国家加起来 */
