@@ -478,7 +478,8 @@ export type AnnalKind =
   | 'keep'
   | 'trek'
   | 'winter'
-  | 'reform';
+  | 'reform'
+  | 'colonize';
 
 /**
  * 战争的起因(史事 war 的 cause;阶段 4 干预的强制宣战不给)和盟约怎么断的(unally 的 cause):

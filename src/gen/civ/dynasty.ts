@@ -317,6 +317,17 @@ function hook(sim: CivSim, dm: DynastyModel): void {
   };
   sim.on(Ev.DynastyCheck, dynastyCheck);
   dm.look = (p, k, t) => dynastyCheck(k, p, t);
+  // 国势补遗(riseRules.ts 第十一批):积欠多年的小君主国禁军哗变、易姓(起于国都,不迁都)
+  civApi(sim).politics.coup = (P, t) => {
+    const p = P.id;
+    if (P.ended !== undefined || !royalAt(P, t) || pm.iv?.keeps(p, t) !== undefined && (pm.iv?.keeps(p, t) ?? -1) >= 0) return false;
+    const sid = capitalAt(P, t);
+    if (!P.dynasties) P.dynasties = [{ year: P.founded, name: '', seat: P.capital }];
+    P.dynasties.push({ year: t, name: '', seat: sid });
+    dynastyReign(sim, pm, p, t);
+    sim.record('dynasty', { a: p, region: pm.settlements[sid].region, settlement: sid, cause: 'arrears' });
+    return true;
+  };
 }
 
 /**

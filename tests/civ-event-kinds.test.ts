@@ -88,9 +88,9 @@ describe('官方推演登记的种类', () => {
     expect(() => new CivSim(1, CIV_EVENTS)).not.toThrow();
   });
 
-  it('史事:49 种每种都写了说明和五列的含义', () => {
+  it('史事:50 种每种都写了说明和五列的含义', () => {
     const kinds = Object.keys(ANNAL_KINDS);
-    expect(kinds.length).toBe(49);
+    expect(kinds.length).toBe(50);
     for (const k of kinds) {
       const v = ANNAL_KINDS[k as keyof typeof ANNAL_KINDS];
       for (const col of ['desc', 'a', 'b', 'region', 'settlement', 'war'] as const) expect(v[col].length, `${k}.${col}`).toBeGreaterThan(0);

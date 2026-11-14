@@ -727,6 +727,7 @@ const TAG: Record<AnnalKind, string> = {
   trek: '徙',
   winter: '冬',
   reform: '制',
+  colonize: '拓',
 };
 
 function base(
@@ -2056,6 +2057,9 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       const t = e.b < 0 ? `${pn(civ, e.a, y)}并吞邻邦` : e.cause === 'vassal' ? `${pn(civ, e.b, y)}纳土归附${pn(civ, e.a, y)}` : `${pn(civ, e.b, y)}并入${pn(civ, e.a, y)}`;
       return base(e, id, t, isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], []);
     }
+    case 'colonize':
+      // 移民实边(politics.ts):"大渭迁民实边,拓殖瑞州"
+      return base(e, id, `${pn(civ, e.a, y)}迁民实边,拓殖${regionName(civ, e.region) || '荒地'}`, 2, [e.a], [e.region], '拓');
     case 'dynasty': {
       // 东方帝国级的国家改朝换代(换国号,地图上的国名跟着变)是大事;西幻的王室更迭国名不变,小一些的国家的也不算
       // (换了的国号日后在"大事"里出现时带一句"原某国",见 introduce)
@@ -2065,7 +2069,7 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       const usurped = !!pre && pre.kind === 'regent' && pre.n === RG_USURP && pre.a === e.a && pre.year === e.year;
       const imp = p && p.eastern && polityTierAt(p, y) >= DYNASTY_TIER ? 3 : 2;
       const i = p ? Math.max(1, dynastyIndexAt(p, y)) : 1;
-      const text = dynastyText(civ, e, ctx.ix, usurped);
+      const text = (e.cause === 'arrears' ? `${pn(civ, e.a, y - 1)}军饷积欠多年,禁军哗变,` : '') + dynastyText(civ, e, ctx.ix, usurped);
       // 末代只在权臣篡位时写到("废少帝自立")
       const old = endedAt(ctx.ix, e.a, y);
       const ousted = !!old && /废(幼主|黜)?/.test(text) && (text.includes(old.name) || (!!old.title && text.includes(`废${rulerTitle(civ, old)}`)));

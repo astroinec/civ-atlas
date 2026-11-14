@@ -153,6 +153,8 @@ export interface PoliticsApi {
   arrears?: (p: number, t: Year) => number;
   /** 开支干预(control.ts 提供):国家 p 的国库减 amount 成"攒满的国库"的百分之一(负数 = 进项;不低于 0) */
   spend?: (p: number, amount: number, t: Year) => void;
+  /** 国势补遗(dynasty.ts 提供):积欠多年的小君主国禁军哗变、易姓(dynasty cause arrears);成了 = true */
+  coup?: (P: Polity, t: Year) => boolean;
   /** 国用与国势:欠饷多年的兵民大起义(unrest.ts 提供;revolt cause arrears + 讨伐);起成了 = true */
   mutiny?: (P: Polity, t: Year) => boolean;
   /** 国用与国势:国用久乏、被迫分封边地(politics.ts 提供;split cause arrears + 受封称臣);封成了 = true */

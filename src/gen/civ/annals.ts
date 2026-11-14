@@ -401,6 +401,14 @@ export const ANNAL_KINDS: Readonly<Record<AnnalKind, AnnalKindInfo>> = {
     settlement: '−1',
     war: '战争编号',
   },
+  colonize: {
+    desc: '移民实边(politics.ts,国势补遗):国家把本族民众迁进紧挨着的无人宜居州,州归本国',
+    a: '国家',
+    b: '−1',
+    region: '拓殖的州',
+    settlement: '−1',
+    war: '−1',
+  },
   reform: {
     desc: '改制(reform.ts):**哪一种在 Annal.n**:0 革命(议立宪 / 废君谈崩、动荡大,有人起兵打进国都,整国改共和;紧跟在那条 council 后面)、1 政变(统兵的将军夺权,改军政府)、2 复辟(迎回旧王室,或执政 / 将军自立为君);同一刻往 Polity.dynasties 加一段。**之后能议政的有几档(参与)在 Annal.opt**(革命)',
     a: '国家',

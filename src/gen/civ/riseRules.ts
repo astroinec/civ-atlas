@@ -267,4 +267,16 @@ export const RISE_KNOBS = defineKnobs('rise', {
   BIG3_P: 0.025,
   FEUD3_SHARE: 0.5,
   ARREARS_REST: 10,
+  /**
+   * 第十一批(国势补遗)从这一年起生效(规则项 split.patchFrom);65535 = 不用:
+   *   ① 欠饷割据不再在已经割据的州上重起(control.ts;原来会重复记一次"割据某某等几州")
+   *   ② 小国兵变(dynasty.ts):积欠满 ARREARS_LATE 年、又够不上被迫分封和兵民大起义的君主国,改由禁军哗变、易姓(dynasty cause arrears)
+   *   ③ 移民实边(politics.ts):国土至少 COLONY_MIN 州的国家每次看内政,有 COLONY_P 的机会把本族民众迁进一处紧挨着的、
+   *      没人住的宜居州(陆上相邻;先挑人口上限高的),州归本国;人口上限 ≥ COLONY_CAP2 时再看一处(一次至多两州)。
+   *      有了人以后民族照常往外扩散、建城
+   */
+  FROM11: 65535,
+  COLONY_MIN: 6,
+  COLONY_P: 0.6,
+  COLONY_CAP2: 60,
 });

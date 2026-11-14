@@ -216,6 +216,7 @@ const U_VASSAL = 11;
 const U_FEUD = 12;
 const U_ABSORB = 13;
 const U_THEO = 14;
+const U_COLONY = 15;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -811,10 +812,39 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     return enfeoffGroup(P, t, foes, 'arrears');
   };
 
+  // ---- 移民实边(国势补遗,riseRules.ts 第十一批):把本族民众迁进紧挨着的无人宜居州 ----
+  const tryColonize = (P: Polity, k: number, t: number): void => {
+    const rk = pm.knobs.get(RISE_KNOBS);
+    if (t < rk.FROM11) return;
+    const pid = P.id;
+    if (pm.size[pid] < rk.COLONY_MIN || wm.iv?.halted(pid, t)) return;
+    if (keyed(pol.base, pm.ptag[pid], k, U_COLONY) >= rk.COLONY_P) return;
+    const cu = P.culture;
+    const T = pm.terrain;
+    for (let n = 0; n < 2; n++) {
+      let best = -1;
+      for (const r of pm.lands[pid]) {
+        for (let q = reg.adjStart[r]; q < reg.adjStart[r + 1]; q++) {
+          const kind = reg.adjKind[q];
+          if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+          const j = reg.adj[q];
+          if (owner[j] >= 0 || culture[j] >= 0 || !T.habitable[j] || wm.iv?.locked(j, t)) continue;
+          if (best < 0 || reg.capacity[j] > reg.capacity[best] || (reg.capacity[j] === reg.capacity[best] && j < best)) best = j;
+        }
+      }
+      if (best < 0) return;
+      sim.setOwner(Layer.Culture, best, cu, Ev.Cede);
+      sim.setOwner(Layer.Polity, best, pid, Ev.Cede);
+      sim.record('colonize', { a: pid, region: best, settlement: -1 });
+      if (reg.capacity[best] < rk.COLONY_CAP2) return;
+    }
+  };
+
   sim.on(Ev.PoliticsCheck, (k, p, t) => {
     const P = pm.polities[p];
     if (!P || P.ended !== undefined) return;
     sim.schedule(checkTime(pol, p, k + 1), Ev.PoliticsCheck, k + 1, p);
+    tryColonize(P, k, t);
     if (tryEnfeoff(P, k, t)) return;
     const split = canSplit(P, t);
     const merge = canMerge(P, t);

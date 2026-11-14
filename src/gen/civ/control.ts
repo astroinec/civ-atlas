@@ -804,13 +804,18 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
       if (n >= riseK.ARREARS_LATE && keyed(cm.base, pm.ptag[p], Y, U_ARR_BIG) < riseK.BIG3_P) {
         const feud = pm.size[p] >= riseK.FEUD_MIN && keyed(cm.base, pm.ptag[p], Y, U_ARR_PICK) < riseK.FEUD3_SHARE;
         if (feud ? api.politics.enfeoff?.(P, t) || api.politics.mutiny?.(P, t) : api.politics.mutiny?.(P, t) || api.politics.enfeoff?.(P, t)) continue;
+        // 国势补遗:够不上分封、起义的小君主国,禁军哗变
+        if (t >= riseK.FROM11 && api.politics.coup?.(P, t)) continue;
       }
       if (keyed(cm.base, pm.ptag[p], Y, U_ARR_LORD) < riseK.LORD2_P) {
         // 管得最松、有城的那州(不是国都)的守将拥兵割据
         let best = -1;
         let bc = Infinity;
+        // 国势补遗:已经割据的州(和它的地盘)不再重起
+        const fix = t >= riseK.FROM11;
+        if (fix) mark(p, t);
         for (const r of pm.lands[p]) {
-          if (!canRaise(p, r, t) || wm.iv?.locked(r, t)) continue;
+          if (!canRaise(p, r, t) || wm.iv?.locked(r, t) || (fix && inLord(r))) continue;
           const c = raw(p, r, t);
           if (c < bc || (c === bc && r < best)) { bc = c; best = r; }
         }
