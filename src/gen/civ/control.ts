@@ -718,7 +718,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
    * 账本每年记完扫一遍新记的行(接着推时从存档的账本从头扫,和一口气推下来的一样)
    */
   // 积欠(fiscalBook.ts 的 ArrearsTracker):入不敷出一年加一年,有结余一年还半年;不在入不敷出、积欠也会拖着
-  const arrears = new ArrearsTracker(riseK.FROM10);
+  const arrears = new ArrearsTracker(riseK.FROM10, riseK.FROM12, riseK.DEBT_CAP);
   let bookScanned = 0;
   const scanBook = (): void => {
     const B = dev.book;
@@ -801,7 +801,9 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
         sim.record('fiscal', { a: p, region: pm.settlements[sid].region, settlement: sid, war: 1, cause: 'arrears', n });
       }
       if (!arrearsRested(p, t)) continue;
-      if (n >= riseK.ARREARS_LATE && keyed(cm.base, pm.ptag[p], Y, U_ARR_BIG) < riseK.BIG3_P) {
+      // 积欠封顶(第十二批):满十年以后,每多欠一年大事的机会再加 BIG3_STEP,至多 BIG3_MAX
+      const big = t >= riseK.FROM12 ? Math.min(riseK.BIG3_MAX, riseK.BIG3_P + riseK.BIG3_STEP * Math.max(0, n - riseK.ARREARS_LATE)) : riseK.BIG3_P;
+      if (n >= riseK.ARREARS_LATE && keyed(cm.base, pm.ptag[p], Y, U_ARR_BIG) < big) {
         const feud = pm.size[p] >= riseK.FEUD_MIN && keyed(cm.base, pm.ptag[p], Y, U_ARR_PICK) < riseK.FEUD3_SHARE;
         if (feud ? api.politics.enfeoff?.(P, t) || api.politics.mutiny?.(P, t) : api.politics.mutiny?.(P, t) || api.politics.enfeoff?.(P, t)) continue;
         // 国势补遗:够不上分封、起义的小君主国,禁军哗变

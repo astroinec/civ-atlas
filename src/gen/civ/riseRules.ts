@@ -279,4 +279,13 @@ export const RISE_KNOBS = defineKnobs('rise', {
   COLONY_MIN: 6,
   COLONY_P: 0.6,
   COLONY_CAP2: 60,
+  /**
+   * 第十二批(积欠封顶)从这一年起生效(规则项 split.debtFrom);65535 = 不用:
+   *   积欠最多记 DEBT_CAP 年(以前可以一路欠到四五十年,收支相抵后几十年也还不清);
+   *   满十年以后每多欠一年,被迫分封 / 兵民大起义 / 禁军哗变的机会在 BIG3_P 之上再加 BIG3_STEP,至多 BIG3_MAX
+   */
+  FROM12: 65535,
+  DEBT_CAP: 20,
+  BIG3_STEP: 0.01,
+  BIG3_MAX: 0.1,
 });

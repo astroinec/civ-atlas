@@ -205,12 +205,13 @@ export const ARREARS_REPAY = 0.5;
 export class ArrearsTracker {
   /** 国家 → 上一行那年以前(不含)的积欠、上一行的年份、那一行起是否入不敷出 */
   private st = new Map<number, { d: number; from: number; broke: boolean }>();
-  constructor(private start: number) {}
+  /** capFrom 年起积欠最多记 cap 年(积欠封顶,riseRules.ts 第十二批;65535 = 不封顶) */
+  constructor(private start: number, private capFrom = 65535, private cap = Infinity) {}
   private at(s: { d: number; from: number; broke: boolean }, t: number): number {
     const a = Math.max(s.from, this.start);
     const n = Math.floor(t) - a + 1;
-    if (n <= 0) return s.d;
-    return s.broke ? s.d + n : Math.max(0, s.d - ARREARS_REPAY * n);
+    const v = n <= 0 ? s.d : s.broke ? s.d + n : Math.max(0, s.d - ARREARS_REPAY * n);
+    return Math.floor(t) >= this.capFrom ? Math.min(this.cap, v) : v;
   }
   feed(year: number, p: number, broke: boolean): void {
     const s = this.st.get(p);
@@ -227,9 +228,9 @@ export class ArrearsTracker {
   }
 }
 /** 由账本算国家 p 第 t 年的积欠(界面、外层用;from = 国用与国势起始年) */
-export function arrearsAt(book: FiscalBook | undefined, p: number, t: number, from: number): number {
+export function arrearsAt(book: FiscalBook | undefined, p: number, t: number, from: number, capFrom = 65535, cap = Infinity): number {
   if (!book) return 0;
-  const tr = new ArrearsTracker(from);
+  const tr = new ArrearsTracker(from, capFrom, cap);
   const K = BOOK_COLS.indexOf('窘迫');
   for (let i = 0; i < book.size && book.year[i] <= t; i++) if (book.polity[i] === p) tr.feed(book.year[i], p, book.data[i * BOOK_WIDTH + K] > 0);
   return tr.value(p, t);
