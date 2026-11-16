@@ -519,6 +519,12 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (culture[r] === Y.culture) sy *= HOME_DEF;
     // 农耕守势(规则项 split.farmDefFrom;riseRules.ts):农耕国、大河国在本族的州上守得更牢;没生效 = 不乘,和原来逐位一样
     if (t >= riseK.FROM5 && culture[r] === Y.culture && (Y.kind === 'farm' || Y.kind === 'river')) sy *= riseK.FARM_DEF;
+    // 分项技术(riseRules.ts 第十三批):双方各按自己的军事技术乘(马镫、火器、棱堡……;没生效 = 不乘)
+    if (t >= riseK.FROM13 && api.war.techEdge) {
+      const [kx, ky] = api.war.techEdge(x, y, r, t);
+      if (kx !== 1) sx *= kx;
+      if (ky !== 1) sy *= ky;
+    }
     // 国用与国势(riseRules.ts 第十批):入不敷出、欠饷的一方兵力打折(没生效 = 1,不乘)
     if (t >= riseK.FROM10 && api.war.pay) {
       const px = api.war.pay(x, t);

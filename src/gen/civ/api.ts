@@ -72,6 +72,8 @@ export interface WarApi {
   purse?: (p: number, t: Year) => number;
   /** 国用与国势(control.ts 提供;riseRules.ts 第十批):国家 p 此刻打仗的兵力打几折(入不敷出越久越低;没生效 / 不欠饷 = 1) */
   pay?: (p: number, t: Year) => number;
+  /** 分项技术(development.ts 提供;没生效 = [1, 1]):x 攻 y 的州 r,双方兵力各乘多少 */
+  techEdge?: (x: number, y: number, r: number, t: Year) => [number, number];
   /** 钱粮(control.ts 提供):州 r 的收入(田赋、工商、市税之和)是国家 p 每州平均的几倍(p 还没算过账 = 0):为掠夺而战挑富州 */
   rich?: (p: number, r: number) => number;
   /** 割据(control.ts 提供):国家 p 此刻有几处割据、最早起的那处在哪州(没有 = n 为 0):邻国趁虚而入 */
@@ -191,6 +193,8 @@ export interface DiplomacyApi {
   vassalize?: (v: number, L: number, t: Year, cause?: 'enfeoff') => boolean;
   /** p 此刻的宗主(没有 = −1;installDiplomacy 提供) */
   liegeOf?: (p: number) => number;
+  /** p 此刻的盟国(installDiplomacy 提供) */
+  alliesOf?: (p: number) => number[];
 }
 
 /** dev那一组(原来挂在 DevModel 上) */
@@ -207,6 +211,10 @@ export interface DevApi {
   afterStep?: (y: Year, prev: Float64Array) => void;
   /** 每一步算完以后(商道 trade.ts 提供;只读,不改推演) */
   afterTick?: (y: Year) => void;
+  /** 分项技术(development.ts 提供;riseRules.ts 第十三批,没生效 = 1):国家 p 的饥荒赔率、饥荒折损、饥民起事赔率乘多少 */
+  famineMul?: (p: number, t: Year) => number;
+  famineHit?: (p: number, t: Year) => number;
+  revoltMul?: (p: number, t: Year) => number;
 }
 
 /** 一次推演的全部具名接口,按组 */

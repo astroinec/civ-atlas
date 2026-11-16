@@ -202,6 +202,7 @@ add(
   num({ id: 'split.fiscFrom', name: '国用与国势起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.patchFrom', name: '国势补遗起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.debtFrom', name: '积欠封顶起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
+  num({ id: 'split.techFrom', name: '分项技术起始年' }, { official: 65535, min: 0, max: 65535, step: 1, unit: '年' }),
   num({ id: 'split.age', name: '王朝老了人心渐散' }, { official: 0.6, min: 0, max: 2, step: 0.1, unit: '' }),
 );
 

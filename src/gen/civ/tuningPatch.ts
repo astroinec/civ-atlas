@@ -82,6 +82,7 @@ const KNOBS: Readonly<Record<string, TuningKnobs>> = {
   'split.fiscFrom': { knobs: ['rise.FROM10'] },
   'split.patchFrom': { knobs: ['rise.FROM11'] },
   'split.debtFrom': { knobs: ['rise.FROM12'] },
+  'split.techFrom': { knobs: ['rise.FROM13'] },
   'split.age': { knobs: ['unrest.AGE_W'] },
   'diplo.pact': { knobs: ['diplomacy.PACT_ODDS'] },
   'diplo.submit': { knobs: ['diplomacy.SUBMIT_ODDS', 'diplomacy.SUE_OFFER'] },

@@ -392,6 +392,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   api.diplomacy.note = record;
   // 分藩(新立国规则):分出去的 v 仍向原国 L 称臣(原国不是别国的藩属;politics.ts 调)
   api.diplomacy.liegeOf = (p: number) => dm.liegeOf(p);
+  api.diplomacy.alliesOf = (p: number) => dm.alliesOf(p);
   api.diplomacy.vassalize = (v: number, L: number, t: number, cause?: 'enfeoff') => {
     if (!alive(v) || !alive(L) || dm.liegeOf(L) >= 0 || dm.liegeOf(v) >= 0) return false;
     swear(v, L, t, -1, cause);

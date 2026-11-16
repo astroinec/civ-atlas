@@ -288,4 +288,11 @@ export const RISE_KNOBS = defineKnobs('rise', {
   DEBT_CAP: 20,
   BIG3_STEP: 0.01,
   BIG3_MAX: 0.1,
+  /**
+   * 第十三批(分项技术)从这一年起生效(规则项 split.techFrom);65535 = 不用。表在 techTable.ts,规则在 tech.ts:
+   * 技术按国家、按项记;自创或经接壤、航线、盟约、同教、交战引进(每年机会 TECH_BASE × 渠道 × 底子 × 学习倍数);
+   * 人口上限、饥荒、饥民起事、国力、打仗都按有没有某项技术阶跃地变(时代只剩名字)
+   */
+  FROM13: 65535,
+  TECH_BASE: 0.004,
 });

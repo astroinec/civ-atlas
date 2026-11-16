@@ -889,6 +889,10 @@ export interface DevState {
   invented: Uint8Array;
   /** 各国的军力系数(PolityModel.military) */
   military: number[];
+  /** 分项技术(tech.ts;第十三批生效后才有):各国 × 技术的有无与年份(铺平)、看过没有、世上第一次;城、乡村人口上限的倍数 */
+  tech?: { n: number; has: Uint8Array; at: Float64Array; seen: Uint8Array; first: Float64Array; firstBy: Int32Array };
+  capF?: Float64Array;
+  ruralF?: Float64Array;
   /** 政局的数表(control.ts:管得到几成、离国都多远、动荡;旧版本存的没有,接着推时现算一次) */
   tables?: TablesState;
 }

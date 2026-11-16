@@ -75,6 +75,7 @@ import { NEVER, devCards } from './devTables';
 import { warModelOf } from './wars';
 import { pandemicModelOf, slumpIn, type PandemicModel } from './pandemicState';
 import { CAPS, INVENTIONS } from './inventions';
+import { cityMulOf, edgeOf, emptyTech, famineMulOf, hitMulOf, milMulOf, packTech, revoltMulOf, ruralMulOf, techStep, unpackTech, type TechState } from './tech';
 import type { CivModule, FinishCtx } from './modules';
 import { Ev } from './events';
 import { civApi } from './api';
@@ -340,6 +341,10 @@ export interface DevModel {
   habitat: Civ['habitat'];
   /** 算发展度的数表(挂到推演上时建好,见 devEngine) */
   eng?: TableEngine;
+  /** 分项技术(riseRules.ts 第十三批;tech.ts):各国有哪些技术。没生效 = 没有 */
+  tech?: TechState;
+  /** 分项技术生效后乡村人口上限的倍数(城的仍是 capF);没生效 = 没有,乡村也用 capF */
+  ruralF?: Float64Array;
   // 别的子系统挂过来的回调不在这里,在具名接口表 civ/api.ts 的 dev 那一组
 }
 
@@ -475,6 +480,10 @@ export function resumeDevelopment(sim: CivSim, world: World, civ: Civ): void {
     }
     d.book = new BookWriter(dev.fiscal);
     pm.military = st.military.slice();
+    if (st.tech) {
+      d.tech = unpackTech(st.tech);
+      d.ruralF = padTo64(st.ruralF!, R);
+    }
   } else {
     // 没存状态:从下一个整 STEP 年起算,史事从现在起读
     d.last = Math.floor(sim.now / STEP) * STEP;
@@ -491,6 +500,8 @@ export function resumeDevelopment(sim: CivSim, world: World, civ: Civ): void {
   seeCities(d);
   // 城的人口上限倍数:和上一步算完时一样(只看生产能力)
   if (st) for (let r = 0; r < R; r++) d.capF[r] = popFactor(d.cur[r * CAP_COUNT + Cap.Production]);
+  // 分项技术生效后城的倍数不只看生产能力:按存下的接上
+  if (st?.capF) d.capF.set(st.capF.subarray(0, Math.min(R, st.capF.length)));
   hook(sim, d);
   sim.schedule(d.last + STEP, Ev.DevTick, 0, 0);
 }
@@ -502,6 +513,11 @@ function padTo(a: Uint8Array, n: number): Uint8Array {
   return b;
 }
 
+function padTo64(a: Float64Array, n: number): Float64Array {
+  const b = new Float64Array(n);
+  b.set(a);
+  return b;
+}
 function padTo32(a: Float32Array, n: number): Float32Array {
   if (a.length >= n) return a.slice();
   const b = new Float32Array(n);
@@ -530,6 +546,12 @@ function hook(sim: CivSim, d: DevModel): void {
   sim.onChange(Layer.Polity, (r) => {
     if (r < d.R) d.sinceP[r] = sim.now;
   });
+  // 分项技术的效果(第十三批;没生效 / 还没看过 = 1)
+  const techOn = (t: Year) => !!d.tech && t >= d.pm.knobs.get(RISE_KNOBS).FROM13;
+  api.dev.famineMul = (p, t) => (techOn(t) ? famineMulOf(d.tech!, p) : 1);
+  api.dev.famineHit = (p, t) => (techOn(t) ? hitMulOf(d.tech!, p) : 1);
+  api.dev.revoltMul = (p, t) => (techOn(t) ? revoltMulOf(d.tech!, p) : 1);
+  api.war.techEdge = (x, y, r, t) => (techOn(t) ? edgeOf(d.tech!, d.pm, x, y, r) : [1, 1]);
   sim.on(Ev.DevTick, (_a, _b, t) => {
     tick(sim, d, t);
     api.dev.afterTick?.(t);
@@ -617,7 +639,7 @@ export function ruralTargets(d: DevModel, y: Year, cap: Float64Array, rate: Floa
     const f = d.firstCity[r];
     const first = f >= 0 ? d.pm.settlements[f] : undefined;
     if (first && y >= first.founded) {
-      cap[r] = base[r] * d.capF[r];
+      cap[r] = base[r] * (d.ruralF ?? d.capF)[r];
       rate[r] = first.growth;
     } else cap[r] = rate[r] = 0;
   }
@@ -1002,10 +1024,27 @@ function tick(sim: CivSim, d: DevModel, y: Year): void {
     }
   }
 
+  // 分项技术(riseRules.ts 第十三批):承认已有、自创、引进;有了的技术把国都那州的能力当即提上去
+  const techNow = y >= pm.knobs.get(RISE_KNOBS).FROM13;
+  if (techNow) {
+    d.tech ??= emptyTech();
+    techStep(d.tech, { sim, pm, seed: d.seed, R, RC: RESOURCE_COUNT, cur, best: d.best, availNow, capR, write: (id, r, c, v) => eng.write(id, r, c, v) }, y, dt);
+    d.ruralF ??= new Float64Array(R);
+    if (d.ruralF.length < R) d.ruralF = padTo64(d.ruralF, R);
+  }
+
   // 反过来影响推演:城的人口上限倍数(变了才记)、各国的军力系数、远洋
   const capIn = sim.influence?.get('city.capacity');
   for (let r = 0; r < R; r++) {
-    const f = popFactor(cur[r * CAP_COUNT + Cap.Production]);
+    let f = popFactor(cur[r * CAP_COUNT + Cap.Production]);
+    if (techNow) {
+      // 分项技术:乡村 = 石器底子 × 农业技术;城 = 石器底子 × 城的技术 × 农业技术开方(粮多才养得起大城)
+      const p = ownP[r];
+      const c = ownC[r];
+      const rm = ruralMulOf(d.tech!, pm, p, r, c >= 0 && cultures[c]?.kind === 'nomad');
+      d.ruralF![r] = Math.round(POP_BASE * rm * POP_QUANT) / POP_QUANT;
+      f = Math.round(POP_BASE * cityMulOf(d.tech!, p) * Math.sqrt(rm) * POP_QUANT) / POP_QUANT;
+    }
     d.capF[r] = f;
     const s = cityIn(pm, r);
     if (!s) continue;
@@ -1020,6 +1059,7 @@ function tick(sim: CivSim, d: DevModel, y: Year): void {
     if (r < 0) continue;
     const o = r * CAP_COUNT;
     mil[p] = Math.min(MIL_MAX, 1 + MIL_PER * cur[o + Cap.Mobilization]);
+    if (techNow) mil[p] *= milMulOf(d.tech!, p);
     if (cur[o + Cap.Transport] >= SAIL_LEVEL) grantSail(sim, pm, p);
   }
 
@@ -1290,6 +1330,7 @@ export function finishDevelopment(sim: CivSim, endYear: Year): Development | und
     worldEra: d.worldEra,
     invented: d.invented.slice(),
     military: Array.from(d.pm.military ?? [], (m) => m ?? 1),
+    ...(d.tech ? { tech: packTech(d.tech), capF: d.capF.slice(), ruralF: d.ruralF!.slice() } : {}),
     ...(api.dev.saveTables ? { tables: api.dev.saveTables() } : {}),
   };
   const control = d.controlYears.length ? { control: d.control.slice(), controlYears: d.controlYears.slice() } : {};

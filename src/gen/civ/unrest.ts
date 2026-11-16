@@ -460,8 +460,11 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
         const f2 = full * full;
         const odds = sev * (1 - HOP_FADE * hop[r]) * CLIMATE[reg.biome[r]] * (pBase + pFull * f2 * f2) * (soil ? 1 + SOIL_W * (1 - soil[r]) : 1);
         const tag = reg.seat[r];
-        if (keyed4(um.base, k, tag, c, U_HIT) >= odds) continue;
-        const loss = LOSS[0] + (LOSS[1] - LOSS[0]) * Math.min(1, 0.5 * odds + 0.5 * keyed4(um.base, k, tag, c, U_LOSS));
+        // 分项技术(第十三批):轮作、运河、化肥等压低饥荒,常平仓、驿道、铁路压低折损(没生效 = 1,和原来逐位一样)
+        const fm = owner[r] >= 0 && api.dev.famineMul ? api.dev.famineMul(owner[r], t) : 1;
+        if (keyed4(um.base, k, tag, c, U_HIT) >= odds * fm) continue;
+        let loss = LOSS[0] + (LOSS[1] - LOSS[0]) * Math.min(1, 0.5 * odds + 0.5 * keyed4(um.base, k, tag, c, U_LOSS));
+        if (owner[r] >= 0 && api.dev.famineHit) loss *= api.dev.famineHit(owner[r], t);
         (s.sacks ??= []).push({ year: t, loss: Math.round(loss * 1000) / 1000, cause: 'famine' });
         const p = owner[r];
         let list = hits.get(p);
@@ -492,7 +495,9 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     if (P.ended !== undefined || N < REVOLT_STATE || rebelNow(pid) || wm.iv?.unites(pid, t)) return false;
     // 这次的饥荒表里还没算进去(每年年初才算),先加上
     const u = api.politics.unrest!(P, t) + (api.politics.famineBump?.(P, list.length) ?? 0);
-    const odds = REVOLT_ODDS * fexp(REVOLT_K * (u - REVOLT_U0)) * Math.min(1, list.length / 3);
+    let odds = REVOLT_ODDS * fexp(REVOLT_K * (u - REVOLT_U0)) * Math.min(1, list.length / 3);
+    // 分项技术(第十三批):常平仓压低饥民起事(没生效 = 1)
+    if (api.dev.revoltMul) odds *= api.dev.revoltMul(pid, t);
     if (keyed(um.base, pm.ptag[pid], k, U_REVOLT) >= odds / (1 + odds)) return false;
     const capR = pm.settlements[capitalAt(P, t)].region;
     // 起事的州:灾最重的、不是国都、有城、不是永久划给它的州(阶段 4 干预)
