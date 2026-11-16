@@ -854,7 +854,12 @@ export type Intervention = (
   | { kind: 'declare'; a: string; b: string; from: number; lead?: number }
   | { kind: 'unity'; a: string; from: number }
   | { kind: 'cede'; a: string; region: string; from: number; permanent?: true }
-  | { kind: 'found'; region: string; from: number; name?: string }
+  /**
+   * settled = 下令时那州已经有人住(以当地民族立国),不给它预备新民族。
+   * 不预备的话,一口气从第 0 年推和逐年接着推结果一样;预备了的(没写 settled),从头推时第 0 年就多出一支没兴起的民族和它的民间信仰,
+   * 民族、信仰的编号跟着变,和逐年接着推(下令那一刻才知道这条命令、来不及预备)的历史就分岔了
+   */
+  | { kind: 'found'; region: string; from: number; name?: string; settled?: true }
   | { kind: 'move'; a: string; city: string; from: number }
   | { kind: 'halt'; a: string; from: number; until?: number }
   | { kind: 'crown'; a: string; char: number; from: number; born: number; until?: number; abdicate?: true; after?: true; keep?: true; leanings: RulerLeanings }
@@ -2321,6 +2326,7 @@ export function tidyIntervention(x: unknown): Intervention | null {
     if (!isRegionKey(o.region)) return null;
     const name = typeof o.name === 'string' ? cleanName('polity', o.name) : '';
     v = name ? { kind, region: o.region, from, name } : { kind, region: o.region, from };
+    if (o.settled === true) v.settled = true;
   } else if (kind === 'disaster') {
     const d = cleanDisaster(o, from);
     if (!d) return null;

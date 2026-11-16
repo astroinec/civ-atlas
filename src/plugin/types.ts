@@ -303,7 +303,7 @@ export type InterventionInfo = (
   | { kind: 'declare'; a: string; b: string; from: number; lead?: number }
   | { kind: 'unity'; a: string; from: number }
   | { kind: 'cede'; a: string; region: string; from: number; permanent?: true }
-  | { kind: 'found'; region: string; from: number; name?: string }
+  | { kind: 'found'; region: string; from: number; name?: string; settled?: true }
   | { kind: 'move'; a: string; city: string; from: number }
   | { kind: 'halt'; a: string; from: number; until?: number }
   | { kind: 'crown'; a: string; char: number; from: number; born: number; until?: number; abdicate?: true; after?: true; keep?: true; leanings: Leanings }

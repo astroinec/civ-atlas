@@ -549,7 +549,8 @@ function planPioneers(m: CultureModel, list: readonly Intervention[], base: numb
   const add: Culture[] = [];
   list.forEach((v, i) => {
     // 推演插件下的立国不备:下命令时才知道,一口气推的那时候已经备不进民族表了
-    if (v.kind !== 'found' || isCommand(v) || v.from <= after || m.cultures.some((c) => c.pioneer === i)) return;
+    // settled(下令时那州已有人住)的不备:从头推和接着推才一样(edits.ts 的 Found)
+    if (v.kind !== 'found' || v.settled || isCommand(v) || v.from <= after || m.cultures.some((c) => c.pioneer === i)) return;
     const r = regionOfKey(v.region, reg.of);
     if (r < 0 || r >= T.R || !T.habitable[r]) return;
     const kind = kindOf(T, r, 'fertile', base);
